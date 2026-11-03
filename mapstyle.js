@@ -14,14 +14,14 @@ const MAP_PALETTE = {
     number: '#A19C95', halo: '#FFFFFF',
   },
   dark: {
-    land: '#25272A', commercial: '#2A2B2E', hospital: '#38292C', school: '#312F28', industrial: '#2A2B2D',
+    land: '#1E2023', commercial: '#25272A', hospital: '#38292C', school: '#312F28', industrial: '#2A2B2D',
     park: '#28392B', wood: '#263627', sand: '#302D26', water: '#1B3550',
-    building: '#33363A', buildingTop: '#3A3D42', buildingEdge: '#2B2E31',
+    building: '#3D4148', buildingTop: '#454950', buildingEdge: '#4E535B',
     roadCase: '#1F2124', minor: '#44474C', mid: '#4F5257', midCase: '#1F2124',
     primary: '#585540', primaryCase: '#2D2C24', motorway: '#7A6337', motorwayCase: '#3F3420',
     path: '#45484C', rail: '#3E4145', runway: '#34363A', boundary: '#5C5670',
     roadText: '#B5B5BA', text: '#E5E5EA', subtle: '#8E8E93', waterText: '#6FA4D2', parkText: '#7FB070',
-    number: '#7C7C82', halo: '#1C1C1E',
+    number: '#B8B8BE', halo: '#1E2023',
   },
 };
 
@@ -167,8 +167,11 @@ function knockMapStyle(dark) {
         paint: { 'text-color': c.roadText, ...halo },
       },
       {
-        id: 'label-housenumber', type: 'symbol', source: 'omt', 'source-layer': 'housenumber', minzoom: 17,
-        layout: { 'text-field': ['get', 'housenumber'], 'text-font': regular, 'text-size': 11, 'text-padding': 2 },
+        id: 'label-housenumber', type: 'symbol', source: 'omt', 'source-layer': 'housenumber', minzoom: 16,
+        layout: {
+          'text-field': ['get', 'housenumber'], 'text-font': regular, 'text-padding': 2,
+          'text-size': ['interpolate', ['linear'], ['zoom'], 16, 10, 18, 12],
+        },
         paint: { 'text-color': c.number, 'text-halo-color': c.halo, 'text-halo-width': 1 },
       },
       {

@@ -2,7 +2,7 @@
 // with the cache as a fallback; MapLibre is cache-first. Map tiles and fonts are served from cache
 // and refreshed in the background, so streets you've viewed still show without a signal.
 // Address lookups always go to the network.
-const VERSION = 'knock-v2';
+const VERSION = 'knock-v3';
 const TILES = 'knock-tiles';
 const SHELL = [
   './', 'index.html', 'style.css', 'mapstyle.js', 'app.js', 'manifest.webmanifest',
@@ -30,8 +30,13 @@ self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url);
 
   if (url.origin === location.origin) {
+    // 'no-cache' revalidates with the server so a new version shows up right away, not after the
+    // browser's own cache expires. Page loads (navigate requests) can't take options, so refetch by URL.
+    const fresh = e.request.mode === 'navigate'
+      ? fetch(e.request.url, { cache: 'no-cache' })
+      : fetch(e.request, { cache: 'no-cache' });
     e.respondWith(
-      fetch(e.request)
+      fresh
         .then((res) => {
           const copy = res.clone();
           caches.open(VERSION).then((c) => c.put(e.request, copy));

@@ -73,6 +73,8 @@ const ICON = {
   download: '<path d="M12 4v11M7 10l5 5 5-5M5 20h14"/>',
   upload: '<path d="M12 15V4M7 9l5-5 5 5M5 20h14"/>',
   search: '<circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/>',
+  sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4"/>',
+  moon: '<path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/>',
 };
 const STATUS_ICONS = ['house', 'x', 'back', 'star', 'calendar', 'dollar', 'no', 'check', 'clock', 'question', 'bolt', 'flame', 'phone', 'mail', 'person', 'lock'];
 const ic = (name, cls = '') =>
@@ -289,8 +291,20 @@ const group = (inner) => `<div class="group">${inner}</div>`;
 const foot = (t) => `<div class="foot">${t}</div>`;
 // Very dark colors (like Do Not Knock) would vanish on dark backgrounds, so lift them in dark mode.
 const darkMode = matchMedia('(prefers-color-scheme: dark)');
+/** Appearance setting: 'auto' follows the phone, 'light' / 'dark' force one look. */
+const isDark = () => (S.appearance === 'dark') || (S.appearance !== 'light' && darkMode.matches);
+let mapIsDark = null;
+function applyTheme() {
+  const dark = isDark();
+  if (S.appearance === 'light' || S.appearance === 'dark') document.documentElement.dataset.theme = S.appearance;
+  else delete document.documentElement.dataset.theme;
+  $('#theme-color')?.setAttribute('content', dark ? '#000000' : '#f2f2f7');
+  // A full style reload (diff: false) fires style.load, which re-adds the houses/territory layers.
+  if (map && mapIsDark !== null && mapIsDark !== dark) map.setStyle(knockMapStyle(dark), { diff: false });
+  mapIsDark = dark;
+}
 function tone(hex) {
-  if (!darkMode.matches) return hex;
+  if (!isDark()) return hex;
   const n = parseInt(hex.slice(1), 16), r = n >> 16, g = (n >> 8) & 255, b = n & 255;
   return 0.2126 * r + 0.7152 * g + 0.0722 * b < 40 ? '#B0B4BA' : hex;
 }
@@ -364,7 +378,8 @@ V.mapMenu = () => ({
   body: group(
     `<button class="row" data-act="draw-start">${ic('pencil')}<span class="grow">Draw territory</span></button>` +
     `<button class="row" data-act="open-terrs">${ic('square')}<span class="grow">Territories</span>${ic('chev', 'chev')}</button>` +
-    `<button class="row" data-act="fit">${ic('expand')}<span class="grow">Fit all houses</span></button>`,
+    `<button class="row" data-act="fit">${ic('expand')}<span class="grow">Fit all houses</span></button>` +
+    `<button class="row" data-act="theme-toggle">${ic(isDark() ? 'sun' : 'moon')}<span class="grow">${isDark() ? 'Light mode' : 'Dark mode'}</span></button>`,
   ),
 });
 
@@ -613,6 +628,9 @@ V.teamRoot = () => {
 V.settings = () => ({
   title: 'Settings',
   body:
+    sec('Appearance') +
+    group(`<div class="seg-wrap"><div class="seg">${[['auto', 'Auto'], ['light', 'Light'], ['dark', 'Dark']].map(([k, l]) => `<button class="${(S.appearance || 'auto') === k ? 'on' : ''}" data-act="appearance" data-v="${k}">${l}</button>`).join('')}</div></div>`) +
+    foot('Auto follows your phone’s Light/Dark setting.') +
     sec('Door statuses') +
     group(
       statuses().map((s) => `<button class="row" data-act="push" data-v="status" data-id="${s.id}">${dot(s, 26)}<span class="grow">${esc(s.name)}</span>${s.kind !== 'neutral' ? `<span class="val">${KINDS[s.kind]}</span>` : ''}${ic('chev', 'chev')}</button>`).join('') +
@@ -753,7 +771,7 @@ function initMap() {
   const c = S.mapCenter || DEFAULT_CENTER;
   map = new maplibregl.Map({
     container: 'map',
-    style: knockMapStyle(darkMode.matches),
+    style: knockMapStyle(isDark()),
     center: [c[1], c[0]],
     zoom: S.mapZoom && S.mapZoom <= 20 ? S.mapZoom : 16,
     attributionControl: false,
@@ -1193,6 +1211,8 @@ const A = {
   },
   fit() { ui.sheets = []; render(); fitHouses(); },
   north() { map.easeTo({ bearing: 0, pitch: 0, duration: 500 }); },
+  appearance({ v }) { S.appearance = v; save(); applyTheme(); render(); },
+  'theme-toggle'() { S.appearance = isDark() ? 'light' : 'dark'; save(); ui.sheets = []; applyTheme(); render(); },
   locate() {
     const go = () => map.easeTo({ center: [userLatLng[1], userLatLng[0]], zoom: Math.max(map.getZoom(), 16.5), duration: 600 });
     if (userLatLng) { go(); return; }
@@ -1251,9 +1271,10 @@ document.addEventListener('change', (e) => {
 
 /* ---------------------------------------------------------------- boot */
 
+applyTheme();
 initMap();
+mapIsDark = isDark();
 render();
-// A full style reload (diff: false) fires style.load, which re-adds the houses/territory layers.
-darkMode.addEventListener('change', () => { map.setStyle(knockMapStyle(darkMode.matches), { diff: false }); render(); });
+darkMode.addEventListener('change', () => { applyTheme(); render(); });
 navigator.storage?.persist?.();
 if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js');
