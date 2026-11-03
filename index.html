@@ -5,7 +5,17 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-status-bar-style" id="status-bar-style" content="default">
+  <script>
+    // iPhone home-screen apps read the status bar style at launch: in dark mode let the app draw under
+    // a translucent bar (white text); in light mode keep the default bar (dark text).
+    (function () {
+      var pref = 'auto';
+      try { pref = (JSON.parse(localStorage.getItem('knock.v1')) || {}).appearance || 'auto'; } catch (e) {}
+      var dark = pref === 'dark' || (pref !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches);
+      document.getElementById('status-bar-style').setAttribute('content', dark ? 'black-translucent' : 'default');
+    })();
+  </script>
   <meta name="apple-mobile-web-app-title" content="Knock">
   <meta name="theme-color" id="theme-color" content="#f2f2f7">
   <title>Knock</title>
@@ -16,6 +26,7 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body data-tab="map">
+  <div id="status-scrim"></div>
   <div id="app">
     <div id="map"></div>
     <div id="map-ui"></div>
@@ -24,6 +35,7 @@
     <div id="sheets"></div>
   </div>
   <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+  <script src="https://unpkg.com/pmtiles@3.2.1/dist/pmtiles.js"></script>
   <script src="mapstyle.js"></script>
   <script src="app.js"></script>
 </body>

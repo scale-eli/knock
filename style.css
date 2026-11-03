@@ -60,6 +60,12 @@ a { color: var(--accent); }
 .ic { width: 22px; height: 22px; flex: none; }
 
 #app { position: fixed; inset: 0; overflow: hidden; }
+/* Behind the iPhone status bar: a soft band in the page color so the clock and battery stay readable
+   over the map. Zero height when the phone puts the app below an opaque status bar. */
+#status-scrim {
+  position: fixed; z-index: 1400; top: 0; left: 0; right: 0; height: env(safe-area-inset-top); pointer-events: none;
+  background: linear-gradient(var(--bg), color-mix(in srgb, var(--bg) 70%, transparent));
+}
 
 /* ---------- tab bar ---------- */
 #tabbar {

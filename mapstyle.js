@@ -1,6 +1,8 @@
 'use strict';
 /* Knock map style: a clean, soft, Apple Maps–inspired look built on free OpenFreeMap vector tiles
-   (OpenMapTiles schema). knockMapStyle(dark) returns a MapLibre style for light or dark mode. */
+   (OpenMapTiles schema). knockMapStyle(dark, regionUrl) returns a MapLibre style for light or dark mode.
+   regionUrl (optional) points at a PMTiles pack of Overture Maps buildings + house numbers, which fills
+   in neighborhoods OpenStreetMap hasn't mapped yet. */
 
 const MAP_PALETTE = {
   light: {
@@ -25,7 +27,7 @@ const MAP_PALETTE = {
   },
 };
 
-function knockMapStyle(dark) {
+function knockMapStyle(dark, regionUrl) {
   const c = dark ? MAP_PALETTE.dark : MAP_PALETTE.light;
   const name = ['coalesce', ['get', 'name:en'], ['get', 'name']];
   const cls = (...v) => ['match', ['get', 'class'], v, true, false];
@@ -69,7 +71,12 @@ function knockMapStyle(dark) {
     version: 8,
     name: dark ? 'Knock Dark' : 'Knock Light',
     glyphs: 'https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf',
-    sources: { omt: { type: 'vector', url: 'https://tiles.openfreemap.org/planet' } },
+    sources: {
+      omt: { type: 'vector', url: 'https://tiles.openfreemap.org/planet' },
+      ...(regionUrl ? {
+        region: { type: 'vector', url: `pmtiles://${regionUrl}`, attribution: '<a href="https://overturemaps.org">© Overture Maps Foundation</a>' },
+      } : {}),
+    },
     layers: [
       { id: 'land', type: 'background', paint: { 'background-color': c.land } },
 
@@ -131,6 +138,17 @@ function knockMapStyle(dark) {
           'fill-extrusion-opacity': ['interpolate', ['linear'], ['zoom'], 14, 0, 15, 0.9],
         },
       },
+      ...(regionUrl ? [
+        {
+          id: 'region-building', type: 'fill', source: 'region', 'source-layer': 'buildings', minzoom: 14,
+          paint: { 'fill-color': c.building, 'fill-outline-color': c.buildingEdge, 'fill-opacity': ['interpolate', ['linear'], ['zoom'], 14, 0, 15, 1] },
+        },
+        {
+          id: 'region-building-3d', type: 'fill-extrusion', source: 'region', 'source-layer': 'buildings', minzoom: 14,
+          layout: { visibility: 'none' },
+          paint: { 'fill-extrusion-color': c.buildingTop, 'fill-extrusion-height': 6, 'fill-extrusion-opacity': 0.9 },
+        },
+      ] : []),
 
       {
         id: 'boundary', type: 'line', source: 'omt', 'source-layer': 'boundary',
@@ -166,6 +184,14 @@ function knockMapStyle(dark) {
         },
         paint: { 'text-color': c.roadText, ...halo },
       },
+      ...(regionUrl ? [{
+        id: 'label-region-number', type: 'symbol', source: 'region', 'source-layer': 'addresses', minzoom: 16,
+        layout: {
+          'text-field': ['to-string', ['get', 'number']], 'text-font': regular, 'text-padding': 2,
+          'text-size': ['interpolate', ['linear'], ['zoom'], 16, 10, 18, 12],
+        },
+        paint: { 'text-color': c.number, 'text-halo-color': c.halo, 'text-halo-width': 1 },
+      }] : []),
       {
         id: 'label-housenumber', type: 'symbol', source: 'omt', 'source-layer': 'housenumber', minzoom: 16,
         layout: {

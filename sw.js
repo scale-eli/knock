@@ -2,7 +2,7 @@
 // with the cache as a fallback; MapLibre is cache-first. Map tiles and fonts are served from cache
 // and refreshed in the background, so streets you've viewed still show without a signal.
 // Address lookups always go to the network.
-const VERSION = 'knock-v3';
+const VERSION = 'knock-v4';
 const TILES = 'knock-tiles';
 const SHELL = [
   './', 'index.html', 'style.css', 'mapstyle.js', 'app.js', 'manifest.webmanifest',
@@ -11,6 +11,7 @@ const SHELL = [
 const LIBS = [
   'https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css',
   'https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js',
+  'https://unpkg.com/pmtiles@3.2.1/dist/pmtiles.js',
 ];
 
 self.addEventListener('install', (e) => {
@@ -28,6 +29,8 @@ self.addEventListener('activate', (e) => {
 self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET') return;
   const url = new URL(e.request.url);
+  // The region pack is read in small byte ranges; let those go straight to the network.
+  if (url.pathname.endsWith('.pmtiles')) return;
 
   if (url.origin === location.origin) {
     // 'no-cache' revalidates with the server so a new version shows up right away, not after the

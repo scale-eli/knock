@@ -299,8 +299,10 @@ function applyTheme() {
   if (S.appearance === 'light' || S.appearance === 'dark') document.documentElement.dataset.theme = S.appearance;
   else delete document.documentElement.dataset.theme;
   $('#theme-color')?.setAttribute('content', dark ? '#000000' : '#f2f2f7');
+  // Takes effect the next time the home-screen app is opened (iOS reads it at launch).
+  $('#status-bar-style')?.setAttribute('content', dark ? 'black-translucent' : 'default');
   // A full style reload (diff: false) fires style.load, which re-adds the houses/territory layers.
-  if (map && mapIsDark !== null && mapIsDark !== dark) map.setStyle(knockMapStyle(dark), { diff: false });
+  if (map && mapIsDark !== null && mapIsDark !== dark) map.setStyle(mapStyle(dark), { diff: false });
   mapIsDark = dark;
 }
 function tone(hex) {
@@ -764,6 +766,10 @@ function toast(msg) {
 
 let map, userMarker, userLatLng = null, centeredOnUser = false;
 const PIN_ZOOM = 15; // below this, pins become plain dots
+// Overture Maps buildings + house numbers for the local area (see data/README.md), read by range requests.
+const REGION_URL = new URL('data/region.pmtiles', location.href).href;
+if (window.pmtiles) maplibregl.addProtocol('pmtiles', new pmtiles.Protocol().tile);
+const mapStyle = (dark) => knockMapStyle(dark, window.pmtiles ? REGION_URL : null);
 const pinImages = new Set(); // image ids already added to the current style
 const FIT_PADDING = { top: 120, bottom: 200, left: 40, right: 40 };
 
@@ -771,7 +777,7 @@ function initMap() {
   const c = S.mapCenter || DEFAULT_CENTER;
   map = new maplibregl.Map({
     container: 'map',
-    style: knockMapStyle(isDark()),
+    style: mapStyle(isDark()),
     center: [c[1], c[0]],
     zoom: S.mapZoom && S.mapZoom <= 20 ? S.mapZoom : 16,
     attributionControl: false,
@@ -913,9 +919,12 @@ function onMapClick(e) {
 
 function updateCompass() {
   const tilted = map.getPitch() > 8;
-  if (map.getLayer('building-3d') && (map.getLayoutProperty('building-3d', 'visibility') === 'visible') !== tilted) {
-    map.setLayoutProperty('building-3d', 'visibility', tilted ? 'visible' : 'none');
-    map.setLayoutProperty('building', 'visibility', tilted ? 'none' : 'visible');
+  for (const flat of ['building', 'region-building']) {
+    const raised = `${flat}-3d`;
+    if (map.getLayer(raised) && (map.getLayoutProperty(raised, 'visibility') === 'visible') !== tilted) {
+      map.setLayoutProperty(raised, 'visibility', tilted ? 'visible' : 'none');
+      map.setLayoutProperty(flat, 'visibility', tilted ? 'none' : 'visible');
+    }
   }
   const el = $('#compass');
   if (!el) return;
