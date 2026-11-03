@@ -1,0 +1,15 @@
+{
+  "name": "Knock",
+  "short_name": "Knock",
+  "description": "Door-to-door canvassing: map, customers, planner, pipeline and team.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#000000",
+  "theme_color": "#000000",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}
