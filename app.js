@@ -823,7 +823,7 @@ function toast(msg) {
 let map, userMarker, userLatLng = null, centeredOnUser = false;
 const PIN_ZOOM = 15; // below this, pins become plain dots
 // Overture Maps buildings + house numbers for the local area (see data/README.md), read by range requests.
-const REGION_URL = new URL('data/region.pmtiles?v=2', location.href).href;
+const REGION_URL = new URL('data/region.pmtiles?v=3', location.href).href;
 if (window.pmtiles) maplibregl.addProtocol('pmtiles', new pmtiles.Protocol().tile);
 const isSatellite = () => S.mapType === 'satellite';
 const countyPhotos = () => S.countyPhotos !== false; // county aerial photos in satellite view (on by default)
@@ -1032,7 +1032,10 @@ function mapAddressAt(point) {
     if (hit) {
       const { number, street, unit } = hit.f.properties;
       if (street) {
-        return { address: [number, street].join(' ') + (unit ? ` #${unit}` : ''), lng: hit.lng, lat: hit.lat, complete: true };
+        // Some county data is ALL CAPS ("VALENCIA RD"); show it as "Valencia Rd". Unit "UNIT 9301" → "#9301".
+        const nice = street === street.toUpperCase() ? street.toLowerCase().replace(/\b[a-z]/g, (c) => c.toUpperCase()) : street;
+        const apt = unit ? ` #${String(unit).replace(/^(unit|apt|ste|#)\s*/i, '')}` : '';
+        return { address: `${number} ${nice}${apt}`, lng: hit.lng, lat: hit.lat, complete: true };
       }
       return { number: String(number), lng: hit.lng, lat: hit.lat, complete: false };
     }
