@@ -1,6 +1,7 @@
 'use strict';
 /* Knock – web version. Mirrors the iOS app: Map, Customers, Planner, Pipeline, Team.
-   All data lives in this browser (localStorage). Use Settings → Export backup regularly. */
+   Data lives in this browser (localStorage) and, once signed in, syncs with the team through
+   Firebase (cloud.js). */
 
 /* ---------------------------------------------------------------- utilities */
 
@@ -153,18 +154,21 @@ function load() {
 
 let S = load();
 
+function saveLocal() {
+  try { localStorage.setItem(KEY, JSON.stringify(S)); } catch { toast('Storage is full — export a backup'); }
+}
 function save() {
   clearTimeout(save.t);
-  save.t = setTimeout(() => {
-    try { localStorage.setItem(KEY, JSON.stringify(S)); } catch { toast('Storage is full — export a backup'); }
-  }, 120);
+  save.t = setTimeout(() => { saveLocal(); Cloud.push(); }, 120);
 }
+const teamMode = () => Cloud.ready;
 
 const get = (coll, id) => (id ? S[coll].find((x) => x.id === id) : undefined);
 const statuses = () => [...S.statuses].sort((a, b) => a.order - b.order);
 const stages = () => [...S.stages].sort((a, b) => a.order - b.order);
 const reps = () => [...S.reps].sort((a, b) => a.name.localeCompare(b.name));
-const me = () => S.reps.find((r) => r.isMe);
+// Signed in: the rep tied to this login. Otherwise: the rep picked as "this device".
+const me = () => (teamMode() ? S.reps.find((r) => r.email === Cloud.email) : S.reps.find((r) => r.isMe));
 const visitsOf = (h) => S.visits.filter((v) => v.houseId === h.id).sort((a, b) => b.date.localeCompare(a.date));
 const customerOf = (h) => S.customers.find((c) => c.houseId === h.id);
 const fullName = (c) => [c.firstName, c.lastName].filter(Boolean).join(' ') || 'New customer';
@@ -647,19 +651,33 @@ V.teamRoot = () => {
       sec('Doors knocked') +
       group(`<div class="bars">${rows.map((x) => `<div class="bar-row"><div class="bar-name">${esc(x.r.name)}</div><div class="bar-line"><span class="bar" style="width:${(x.doors / max) * 88}%;background:${x.r.colorHex}"></span><span class="bar-n">${x.doors}</span></div></div>`).join('')}</div>`) +
       sec('Leaderboard') +
-      group(rows.map((x, i) => `<div class="row"><span class="rank">${i < 3 ? medals[i] : i + 1}</span>${avatar(x.r)}<span class="grow"><span class="t">${esc(x.r.name)}</span>${x.r.isMe ? '<span class="you">You</span>' : ''}</span>${metric(x.leads, 'leads')}${metric(x.appts, 'appts')}${metric(x.sales, 'sales')}</div>`).join('')) +
+      group(rows.map((x, i) => `<div class="row"><span class="rank">${i < 3 ? medals[i] : i + 1}</span>${avatar(x.r)}<span class="grow"><span class="t">${esc(x.r.name)}</span>${x.r === me() ? '<span class="you">You</span>' : ''}</span>${metric(x.leads, 'leads')}${metric(x.appts, 'appts')}${metric(x.sales, 'sales')}</div>`).join('')) +
       sec('Team') +
       group(
-        reps().map((r) => `<div class="row">${avatar(r)}<span class="grow">${esc(r.name)}</span>${r.isMe
-          ? '<span class="val">This device</span>'
-          : `<button class="mini-btn" data-act="set-me" data-id="${r.id}">I'm ${esc(r.name)}</button><button class="icon-btn danger" data-act="rep-del" data-id="${r.id}" aria-label="Remove">${ic('trash')}</button>`}</div>`).join('') +
+        reps().map((r) => `<div class="row">${avatar(r)}<span class="grow"><span class="t">${esc(r.name)}</span>${teamMode() && r.email ? `<span class="s">${esc(r.email)}</span>` : ''}</span>${r === me()
+          ? `<span class="val">${teamMode() ? 'You' : 'This device'}</span>`
+          : `${teamMode() ? '' : `<button class="mini-btn" data-act="set-me" data-id="${r.id}">I'm ${esc(r.name)}</button>`}<button class="icon-btn danger" data-act="rep-del" data-id="${r.id}" aria-label="Remove">${ic('trash')}</button>`}</div>`).join('') +
         `<button class="row link" data-act="rep-add">${ic('person')}Add teammate</button>`,
       ) +
+      (teamMode() ? foot('Teammates appear here when they first sign in. Add people who don’t use the app (like technicians) with Add teammate.') + teamAccessHTML() : '') +
       `<div class="group mt"><button class="row" data-act="push" data-v="settings">${ic('gear')}<span class="grow">Statuses, pipeline & data</span>${ic('chev', 'chev')}</button></div>`,
   };
 };
 
 /* --- settings --- */
+
+// Who can sign in to this team. Everyone sees the list; only the owner can change it.
+function teamAccessHTML() {
+  const owner = Cloud.role === 'owner';
+  return sec('Team access') +
+    group(
+      Cloud.members.map((m) => `<div class="row"><span class="grow"><span class="t">${esc(m.email)}</span></span>${m.role === 'owner'
+        ? '<span class="val">Owner</span>'
+        : owner ? `<button class="icon-btn danger" data-act="member-del" data-email="${esc(m.email)}" aria-label="Remove access">${ic('trash')}</button>` : ''}</div>`).join('') +
+      (owner ? `<div class="row"><input id="invite-email" type="email" inputmode="email" autocomplete="off" placeholder="teammate@email.com"><button class="mini-btn" data-act="member-add">Invite</button></div>` : ''),
+    ) +
+    foot(owner ? 'Invite a teammate’s email, then send them the app link. They sign in with Google or with that email and see every door the team has knocked.' : 'Only the owner can invite or remove people.');
+}
 
 V.settings = () => ({
   title: 'Settings',
@@ -678,15 +696,16 @@ V.settings = () => ({
       stages().map((s) => `<button class="row" data-act="push" data-v="stage" data-id="${s.id}"><i class="sdot" style="background:${s.colorHex}"></i><span class="grow">${esc(s.name)}</span>${ic('chev', 'chev')}</button>`).join('') +
       `<button class="row link" data-act="stage-add">${ic('plus')}Add stage</button>`,
     ) +
+    (teamMode() ? sec('Account') + group(`<div class="row"><span class="grow"><span class="t">${esc(Cloud.email)}</span><span class="s">${Cloud.role === 'owner' ? 'Team owner' : 'Team member'} · syncing</span></span><button class="mini-btn" data-act="sign-out">Sign out</button></div>`) : '') +
     sec('Data') +
     group(
-      `<button class="row link" data-act="demo">${ic('wand')}Load demo neighborhood</button>` +
+      (teamMode() ? '' : `<button class="row link" data-act="demo">${ic('wand')}Load demo neighborhood</button>`) +
       `<button class="row link" data-act="export-json">${ic('download')}Export backup</button>` +
       `<label class="row link">${ic('upload')}Restore backup<input type="file" id="import-file" accept="application/json,.json" hidden></label>` +
       `<button class="row link" data-act="export-csv">${ic('download')}Export houses as CSV</button>` +
-      `<button class="row danger" data-act="erase">${ic('trash')}Erase all data</button>`,
+      (!teamMode() || Cloud.role === 'owner' ? `<button class="row danger" data-act="erase">${ic('trash')}${teamMode() ? 'Erase all team data' : 'Erase all data'}</button>` : ''),
     ) +
-    foot(ui.demoMsg || 'Everything is saved only on this device. Export a backup now and then so you never lose your knocks.'),
+    foot(ui.demoMsg || (teamMode() ? 'Saved to your team’s cloud and on this phone. Works offline and syncs when you have signal.' : 'Everything is saved only on this device. Export a backup now and then so you never lose your knocks.')),
 });
 
 V.status = (e) => {
@@ -1276,6 +1295,9 @@ const A = {
     render();
   },
   'set-me'({ id }) { S.reps.forEach((r) => { r.isMe = r.id === id; }); save(); render(); },
+  'member-add'() { const el = $('#invite-email'); if (el?.value) Cloud.invite(el.value).then(() => { el.value = ''; }).catch(() => toast('Only the owner can invite')); },
+  'member-del'({ email }) { if (confirm(`Remove ${email} from the team? They won’t be able to open the team’s data.`)) Cloud.removeMember(email); },
+  'sign-out'() { if (confirm('Sign out of Knock on this phone?')) { Cloud.signOut(); ui.sheets = []; ui.stacks = { customers: [], planner: [], pipeline: [], team: [] }; } },
   'rep-del'({ id }) { if (confirm('Remove this teammate? Their past knocks stay, unassigned.')) { deleteRep(id); render(); } },
 
   'status-add'() {
@@ -1307,8 +1329,10 @@ const A = {
   },
   'export-csv'() { shareOrDownload(`knock-houses-${dayKey(new Date())}.csv`, housesCSV(), 'text/csv'); },
   erase() {
-    if (!confirm('Erase every house, customer and appointment? This cannot be undone.')) return;
-    S = defaults();
+    if (!confirm(teamMode() ? 'Erase every house, customer and appointment for the WHOLE TEAM? This cannot be undone.' : 'Erase every house, customer and appointment? This cannot be undone.')) return;
+    const keepMe = teamMode() && me();
+    S = { ...defaults(), appearance: S.appearance, mapCenter: S.mapCenter, mapZoom: S.mapZoom };
+    if (keepMe) S.reps = [keepMe];
     save();
     ui.demoMsg = '';
     render();
@@ -1409,6 +1433,7 @@ document.addEventListener('change', (e) => {
 /* ---------------------------------------------------------------- boot */
 
 applyTheme();
+Cloud.init();
 initMap();
 mapIsDark = isDark();
 render();

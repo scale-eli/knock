@@ -1,17 +1,20 @@
 // Offline support. App files are network-first (so updates show up as soon as you're online)
 // with the cache as a fallback; MapLibre is cache-first. Map tiles and fonts are served from cache
 // and refreshed in the background, so streets you've viewed still show without a signal.
-// Address lookups always go to the network.
-const VERSION = 'knock-v9';
+// Address lookups and team sync (Firestore) always go to the network.
+const VERSION = 'knock-v10';
 const TILES = 'knock-tiles';
 const SHELL = [
-  './', 'index.html', 'style.css', 'mapstyle.js', 'app.js', 'manifest.webmanifest',
+  './', 'index.html', 'style.css', 'mapstyle.js', 'cloud.js', 'app.js', 'manifest.webmanifest',
   'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png',
 ];
 const LIBS = [
   'https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css',
   'https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js',
   'https://unpkg.com/pmtiles@3.2.1/dist/pmtiles.js',
+  'https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js',
+  'https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js',
+  'https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js',
 ];
 
 self.addEventListener('install', (e) => {
@@ -59,7 +62,7 @@ self.addEventListener('fetch', (e) => {
     return;
   }
 
-  if (url.hostname === 'unpkg.com') {
+  if (url.hostname === 'unpkg.com' || (url.hostname === 'www.gstatic.com' && url.pathname.startsWith('/firebasejs/'))) {
     e.respondWith(caches.match(e.request).then((r) => r || fetch(e.request)));
   }
 });

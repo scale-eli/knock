@@ -347,3 +347,32 @@ div.row[data-act] { cursor: pointer; }
   position: fixed; z-index: 3000; left: 50%; top: calc(env(safe-area-inset-top) + 12px); transform: translateX(-50%);
   padding: 10px 16px; border-radius: 14px; background: rgba(0, 0, 0, 0.82); color: #fff; font-size: 14px;
 }
+
+/* ---------- sign-in screen ---------- */
+#gate {
+  position: fixed; inset: 0; z-index: 5000; display: grid; place-items: center; overflow-y: auto;
+  padding: calc(env(safe-area-inset-top) + 24px) 20px calc(env(safe-area-inset-bottom) + 24px);
+  background: var(--bg);
+}
+#gate[hidden] { display: none; }
+.gate-card { width: 100%; max-width: 380px; display: grid; gap: 12px; }
+.gate-logo { font: 800 64px/1 -apple-system, system-ui, sans-serif; letter-spacing: -2px; text-align: center; margin-bottom: 4px; }
+.gate-logo span { font-size: 30px; letter-spacing: -0.5px; }
+.gate-sub { margin: 0 0 6px; text-align: center; color: var(--sec); line-height: 1.4; }
+.gate-sub b { color: var(--text); }
+.gate-err { margin: 0; padding: 10px 12px; border-radius: 12px; background: rgba(229, 72, 77, 0.14); color: #e5484d; font-size: 15px; text-align: center; }
+#gate input {
+  width: 100%; min-height: 50px; padding: 0 16px; border: 0; border-radius: 14px;
+  background: var(--card); color: var(--text); font-size: 17px; outline: none;
+}
+#gate input:focus { box-shadow: 0 0 0 2px var(--accent); }
+.gate-btn {
+  min-height: 50px; border: 0; border-radius: 14px; font-weight: 600; font-size: 17px;
+  background: var(--card); color: var(--text);
+}
+.gate-btn.primary { background: var(--accent); color: #fff; }
+.gate-btn.google { background: var(--text); color: var(--bg); }
+.gate-link { border: 0; background: none; color: var(--accent); font-size: 15px; padding: 8px; }
+.gate-or { display: flex; align-items: center; gap: 10px; color: var(--sec); font-size: 13px; margin: 4px 0; }
+.gate-or::before, .gate-or::after { content: ''; flex: 1; height: 1px; background: var(--sep); }
+#invite-email { flex: 1; min-width: 0; border: 0; background: none; font-size: 17px; outline: none; }
