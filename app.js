@@ -94,6 +94,15 @@ const fmtLength = (m) => {
 const fmtLengthShort = (m) => { const h = Math.floor(m / 60), r = m % 60; return h ? `${h}h${r ? ` ${r}m` : ''}` : `${r}m`; };
 // How often the customer books the cleaning.
 const BOOKING_TYPES = { oneTime: 'One-time', monthly: 'Monthly', quarterly: 'Quarterly', biannual: 'Twice a year', annual: 'Annually' };
+const BOOKING_MONTHS = { monthly: 1, quarterly: 3, biannual: 6, annual: 12 };
+// Same time of day, N months later; the 31st becomes the last day of a shorter month.
+function addMonths(iso, n) {
+  const d = new Date(iso), day = d.getDate();
+  d.setDate(1);
+  d.setMonth(d.getMonth() + n);
+  d.setDate(Math.min(day, new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate()));
+  return d.toISOString();
+}
 const DEFAULT_CENTER = [37.3318, -122.0312];
 
 /* ---------------------------------------------------------------- data */
@@ -1213,7 +1222,19 @@ const A = {
   'appt-save'(_, el) {
     const e = topEntry(el), d = e.draft;
     const clean = { ...d, customerId: d.customerId || null, setterId: d.setterId || null, closerId: d.closerId || null };
-    if (e.id) Object.assign(get('appointments', e.id), clean); else S.appointments.push({ id: uid(), ...clean });
+    let a;
+    if (e.id) a = Object.assign(get('appointments', e.id), clean); else S.appointments.push(a = { id: uid(), ...clean });
+    // A recurring job marked done books its next visit, once.
+    const months = BOOKING_MONTHS[a.bookingType];
+    if (months && (a.outcome === 'completed' || a.outcome === 'sold') && !get('appointments', a.nextId)) {
+      const next = {
+        id: uid(), customerId: a.customerId, start: addMonths(a.start, months), durationMinutes: a.durationMinutes,
+        bookingType: a.bookingType, setterId: a.setterId, closerId: a.closerId, outcome: 'scheduled', notes: '',
+      };
+      S.appointments.push(next);
+      a.nextId = next.id;
+      toast(`Next visit booked for ${fmtDay(next.start)} (${BOOKING_TYPES[a.bookingType]})`);
+    }
     save();
     closeSheet();
   },
