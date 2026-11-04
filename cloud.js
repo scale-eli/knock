@@ -101,7 +101,6 @@ const Cloud = {
             const rec = { ...ch.doc.data(), id };
             if (i >= 0) S[coll][i] = rec; else S[coll].push(rec);
             this.synced[coll].set(id, JSON.stringify(rec));
-            if (coll === 'visits' && ch.type === 'added') announceSale(rec);
           }
           changed = true;
         }
@@ -294,36 +293,6 @@ const Cloud = {
     }
   },
 };
-
-// A teammate logged a knock with a "counts as sale" status (Sold): tell everyone who has the app open.
-function announceSale(v) {
-  const status = S.statuses.find((s) => s.id === v.statusId);
-  if (status?.kind !== 'sale') return;
-  if (v.repId && v.repId === me()?.id) return;                     // my own sale
-  if (Date.now() - new Date(v.date).getTime() > 30 * 60 * 1000) return; // old knock syncing late
-  const rep = S.reps.find((r) => r.id === v.repId);
-  const house = S.houses.find((h) => h.id === v.houseId);
-  showSaleAlert(`${rep?.name || 'A teammate'} made a sale!`, house?.address || '', v.houseId);
-}
-
-function showSaleAlert(title, sub, houseId) {
-  const el = document.createElement('button');
-  el.className = 'sale-alert';
-  el.innerHTML = `<span class="sale-emoji">🎉</span><span class="grow"><b>${esc(title)}</b>${sub ? `<small>${esc(sub)}</small>` : ''}</span>`;
-  el.addEventListener('click', () => {
-    el.remove();
-    if (!houseId || !S.houses.some((h) => h.id === houseId)) return;
-    ui.tab = 'map';
-    ui.sheets = [];
-    render();
-    const h = S.houses.find((x) => x.id === houseId);
-    map.flyTo({ center: [h.longitude, h.latitude], zoom: Math.max(map.getZoom(), 17.5) });
-    openHouse(houseId, false);
-  });
-  document.body.appendChild(el);
-  setTimeout(() => el.classList.add('out'), 7000);
-  setTimeout(() => el.remove(), 7600);
-}
 
 // Opening a sale notification lands on ./?house=<id> (or messages an open window): show that house.
 let linkedHouse = new URLSearchParams(location.search).get('house');

@@ -693,7 +693,7 @@ function alertsHTML() {
     homescreen: row('Open Knock from its Home Screen icon to turn these on', ''),
     unsupported: row('This browser can’t show notifications', ''),
   }[st];
-  return sec('Notifications') + body + foot('Everyone who turns this on gets “🎉 Jay made a sale!” with the address, even when Knock is closed.');
+  return sec('Notifications') + body + foot('Everyone who turns this on gets “🎉 Jay made a sale!” with the address, when Knock is closed or in the background. Nothing pops up while you’re using the app.');
 }
 
 V.settings = () => ({

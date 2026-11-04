@@ -2,7 +2,7 @@
 // with the cache as a fallback; MapLibre is cache-first. Map tiles and fonts are served from cache
 // and refreshed in the background, so streets you've viewed still show without a signal.
 // Address lookups and team sync (Firestore) always go to the network.
-const VERSION = 'knock-v17';
+const VERSION = 'knock-v18';
 const TILES = 'knock-tiles';
 const SHELL = [
   './', 'index.html', 'style.css', 'mapstyle.js', 'cloud.js', 'app.js', 'manifest.webmanifest',
@@ -70,16 +70,26 @@ self.addEventListener('fetch', (e) => {
 
 // Sale alerts. The server (Firebase function saleAlert) sends a data message:
 // { title: '🎉 Jay made a sale!', body: '1155 Valencia Rd', houseId }.
+// Only alerts people who aren't looking at Knock: when it's closed or in the background.
 self.addEventListener('push', (e) => {
   let d = {};
   try { const j = e.data.json(); d = j.data || j.notification || j; } catch { /* empty push */ }
-  e.waitUntil(self.registration.showNotification(d.title || 'Knock', {
-    body: d.body || '',
-    icon: 'icons/icon-192.png',
-    badge: 'icons/icon-192.png',
-    tag: d.houseId ? `sale-${d.houseId}` : undefined,
-    data: { houseId: d.houseId || '' },
-  }));
+  const tag = `sale-${d.houseId || Date.now()}`;
+  e.waitUntil((async () => {
+    const wins = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    const inUse = wins.some((c) => c.visibilityState === 'visible');
+    // iPhones require every push to show a notification (or they stop delivering them), so when
+    // Knock is open on screen, show it and close it straight away instead of skipping it.
+    await self.registration.showNotification(d.title || 'Knock', {
+      body: d.body || '',
+      icon: 'icons/icon-192.png',
+      badge: 'icons/icon-192.png',
+      tag,
+      silent: inUse,
+      data: { houseId: d.houseId || '' },
+    });
+    if (inUse) (await self.registration.getNotifications({ tag })).forEach((n) => n.close());
+  })());
 });
 
 // Tapping the notification opens Knock on that house.
