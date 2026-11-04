@@ -32,7 +32,7 @@ const MAP_PALETTE = {
 // Labels over aerial photos: white text with a dark halo so it reads on any roof or lawn.
 const SAT_LABELS = { roadText: '#FFFFFF', text: '#FFFFFF', subtle: '#E5E5EA', number: '#FFFFFF', halo: 'rgba(0,0,0,0.8)', waterText: '#CFE6FF', parkText: '#DDF2D2' };
 
-function knockMapStyle(dark, regionUrl, satellite = false) {
+function knockMapStyle(dark, regionUrl, satellite = false, countyPhotos = true) {
   const c = satellite ? { ...MAP_PALETTE.dark, ...SAT_LABELS } : dark ? MAP_PALETTE.dark : MAP_PALETTE.light;
   const name = ['coalesce', ['get', 'name:en'], ['get', 'name']];
   const cls = (...v) => ['match', ['get', 'class'], v, true, false];
@@ -91,6 +91,13 @@ function knockMapStyle(dark, regionUrl, satellite = false) {
           type: 'raster', tileSize: 256, minzoom: 15, maxzoom: 20, bounds: [-117.85, 33.85, -115.7, 35.15],
           tiles: ['https://maps.sbcounty.gov/img/rest/services/y2024_IS/ImageServer/exportImage?bbox={bbox-epsg-3857}&bboxSR=3857&imageSR=3857&size=256,256&format=jpgpng&transparent=true&f=image'],
           attribution: 'Imagery © San Bernardino County 2024',
+        },
+        // Riverside County's 2020 aerial photos (3 in per pixel) for Eastvale, Norco and Corona.
+        // Very sharp but older: homes and panels added since 2020 won't be on them.
+        riverside: {
+          type: 'raster', tileSize: 256, minzoom: 15, maxzoom: 21, bounds: [-117.69, 33.42, -114.43, 34.08],
+          tiles: ['https://gis.countyofriverside.us/arcgis_mapping/rest/services/Aerials_WGS/Riverside_County_2020_WM/ImageServer/exportImage?bbox={bbox-epsg-3857}&bboxSR=3857&imageSR=3857&size=256,256&format=jpgpng&transparent=true&f=image'],
+          attribution: 'Imagery © Riverside County 2020',
         },
       } : {}),
       ...(regionUrl ? {
@@ -251,7 +258,10 @@ function knockMapStyle(dark, regionUrl, satellite = false) {
     style.layers = [
       { id: 'land', type: 'background', paint: { 'background-color': '#111' } },
       { id: 'satellite', type: 'raster', source: 'sat', paint: { 'raster-fade-duration': 150 } },
-      { id: 'satellite-county', type: 'raster', source: 'county', minzoom: 15, paint: { 'raster-fade-duration': 150, 'raster-resampling': 'linear' } },
+      ...(countyPhotos ? [
+        { id: 'satellite-county', type: 'raster', source: 'county', minzoom: 15, paint: { 'raster-fade-duration': 150 } },
+        { id: 'satellite-riverside', type: 'raster', source: 'riverside', minzoom: 15, paint: { 'raster-fade-duration': 150 } },
+      ] : []),
       ...style.layers.filter((l) => l.type === 'symbol'),
     ];
   }
