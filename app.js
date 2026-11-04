@@ -75,6 +75,7 @@ const ICON = {
   upload: '<path d="M12 15V4M7 9l5-5 5 5M5 20h14"/>',
   search: '<circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/>',
   sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4"/>',
+  globe: '<circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c2.6 2.4 3.8 5.2 3.8 8.5s-1.2 6.1-3.8 8.5c-2.6-2.4-3.8-5.2-3.8-8.5s1.2-6.1 3.8-8.5z"/>',
   moon: '<path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/>',
 };
 const STATUS_ICONS = ['house', 'x', 'back', 'star', 'calendar', 'dollar', 'no', 'check', 'clock', 'question', 'bolt', 'flame', 'phone', 'mail', 'person', 'lock'];
@@ -331,15 +332,15 @@ const foot = (t) => `<div class="foot">${t}</div>`;
 const darkMode = matchMedia('(prefers-color-scheme: dark)');
 /** Appearance setting: 'auto' follows the phone, 'light' / 'dark' force one look. */
 const isDark = () => (S.appearance === 'dark') || (S.appearance !== 'light' && darkMode.matches);
-let mapIsDark = null;
+let mapIsDark = null; // style key the map was last drawn with (light/dark + satellite)
 function applyTheme() {
   const dark = isDark();
   if (S.appearance === 'light' || S.appearance === 'dark') document.documentElement.dataset.theme = S.appearance;
   else delete document.documentElement.dataset.theme;
   $('#theme-color')?.setAttribute('content', dark ? '#000000' : '#f2f2f7');
   // A full style reload (diff: false) fires style.load, which re-adds the houses/territory layers.
-  if (map && mapIsDark !== null && mapIsDark !== dark) map.setStyle(mapStyle(dark), { diff: false });
-  mapIsDark = dark;
+  if (map && mapIsDark !== null && mapIsDark !== mapStyleKey()) map.setStyle(mapStyle(dark), { diff: false });
+  mapIsDark = mapStyleKey();
 }
 function tone(hex) {
   if (!isDark()) return hex;
@@ -416,6 +417,7 @@ V.mapMenu = () => ({
   body: group(
     `<button class="row" data-act="draw-start">${ic('pencil')}<span class="grow">Draw territory</span></button>` +
     `<button class="row" data-act="open-terrs">${ic('square')}<span class="grow">Territories</span>${ic('chev', 'chev')}</button>` +
+    `<button class="row" data-act="map-type">${ic(isSatellite() ? 'map' : 'globe')}<span class="grow">${isSatellite() ? 'Standard map' : 'Satellite view'}</span></button>` +
     `<button class="row" data-act="fit">${ic('expand')}<span class="grow">Fit all houses</span></button>` +
     `<button class="row" data-act="theme-toggle">${ic(isDark() ? 'sun' : 'moon')}<span class="grow">${isDark() ? 'Light mode' : 'Dark mode'}</span></button>`,
   ),
@@ -822,7 +824,9 @@ const PIN_ZOOM = 15; // below this, pins become plain dots
 // Overture Maps buildings + house numbers for the local area (see data/README.md), read by range requests.
 const REGION_URL = new URL('data/region.pmtiles?v=2', location.href).href;
 if (window.pmtiles) maplibregl.addProtocol('pmtiles', new pmtiles.Protocol().tile);
-const mapStyle = (dark) => knockMapStyle(dark, window.pmtiles ? REGION_URL : null);
+const isSatellite = () => S.mapType === 'satellite';
+const mapStyle = (dark) => knockMapStyle(dark, window.pmtiles ? REGION_URL : null, isSatellite());
+const mapStyleKey = () => `${isDark()}|${isSatellite()}`;
 const pinImages = new Set(); // image ids already added to the current style
 const FIT_PADDING = { top: 120, bottom: 200, left: 40, right: 40 };
 
@@ -1086,6 +1090,7 @@ function renderMapUI() {
   $('#map-ui').innerHTML =
     `<div class="map-top"><div class="chips">${chips}</div><button class="round-btn" data-act="map-menu" aria-label="Map menu">${ic('dots')}</button></div>` +
     `<button class="round-btn locate" data-act="locate" aria-label="My location">${ic('locate')}</button>` +
+    `<button class="round-btn sat${isSatellite() ? ' on' : ''}" data-act="map-type" aria-label="${isSatellite() ? 'Standard map' : 'Satellite view'}">${ic(isSatellite() ? 'map' : 'globe')}</button>` +
     `<button class="round-btn compass" id="compass" data-act="north" aria-label="Face north"><span class="needle"><i></i><b>N</b></span></button>` +
     `<div class="map-bottom">${bottom}</div>`;
   const ch = $('#map-ui .chips');
@@ -1371,6 +1376,13 @@ const A = {
     render();
   },
   fit() { ui.sheets = []; render(); fitHouses(); },
+  'map-type'(_, el) {
+    S.mapType = isSatellite() ? 'standard' : 'satellite';
+    save();
+    if (el.closest('.sheet')) ui.sheets = [];
+    applyTheme();
+    render();
+  },
   north() { map.easeTo({ bearing: 0, pitch: 0, duration: 500 }); },
   appearance({ v }) { S.appearance = v; save(); applyTheme(); render(); },
   'theme-toggle'() { S.appearance = isDark() ? 'light' : 'dark'; save(); ui.sheets = []; applyTheme(); render(); },
@@ -1435,7 +1447,7 @@ document.addEventListener('change', (e) => {
 applyTheme();
 Cloud.init();
 initMap();
-mapIsDark = isDark();
+mapIsDark = mapStyleKey();
 render();
 darkMode.addEventListener('change', () => { applyTheme(); render(); });
 navigator.storage?.persist?.();

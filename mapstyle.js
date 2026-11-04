@@ -2,7 +2,9 @@
 /* Knock map style: a clean, soft, Apple Maps–inspired look built on free OpenFreeMap vector tiles
    (OpenMapTiles schema). knockMapStyle(dark, regionUrl) returns a MapLibre style for light or dark mode.
    regionUrl (optional) points at a PMTiles pack of Overture Maps buildings + house numbers, which fills
-   in neighborhoods OpenStreetMap hasn't mapped yet. */
+   in neighborhoods OpenStreetMap hasn't mapped yet. satellite=true swaps the drawn map for aerial
+   photos (Esri World Imagery) with street names, house numbers and pins on top — handy for spotting
+   roofs with solar panels. */
 
 const MAP_PALETTE = {
   light: {
@@ -27,8 +29,11 @@ const MAP_PALETTE = {
   },
 };
 
-function knockMapStyle(dark, regionUrl) {
-  const c = dark ? MAP_PALETTE.dark : MAP_PALETTE.light;
+// Labels over aerial photos: white text with a dark halo so it reads on any roof or lawn.
+const SAT_LABELS = { roadText: '#FFFFFF', text: '#FFFFFF', subtle: '#E5E5EA', number: '#FFFFFF', halo: 'rgba(0,0,0,0.8)', waterText: '#CFE6FF', parkText: '#DDF2D2' };
+
+function knockMapStyle(dark, regionUrl, satellite = false) {
+  const c = satellite ? { ...MAP_PALETTE.dark, ...SAT_LABELS } : dark ? MAP_PALETTE.dark : MAP_PALETTE.light;
   const name = ['coalesce', ['get', 'name:en'], ['get', 'name']];
   const cls = (...v) => ['match', ['get', 'class'], v, true, false];
   const zw = (pairs) => ['interpolate', ['exponential', 1.6], ['zoom'], ...pairs];
@@ -67,12 +72,19 @@ function knockMapStyle(dark, regionUrl) {
   const minorRoads = road('road-minor', cls('minor', 'residential', 'living_street', 'unclassified'), W.minor, c.minor, c.roadCase, 12);
   const serviceRoads = road('road-service', cls('service', 'track'), W.service, c.minor, c.roadCase, 14, 1);
 
-  return {
+  const style = {
     version: 8,
-    name: dark ? 'Knock Dark' : 'Knock Light',
+    name: satellite ? 'Knock Satellite' : dark ? 'Knock Dark' : 'Knock Light',
     glyphs: 'https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf',
     sources: {
       omt: { type: 'vector', url: 'https://tiles.openfreemap.org/planet' },
+      ...(satellite ? {
+        sat: {
+          type: 'raster', tileSize: 256, maxzoom: 19,
+          tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'],
+          attribution: 'Imagery © Esri, Maxar, Earthstar Geographics',
+        },
+      } : {}),
       ...(regionUrl ? {
         region: { type: 'vector', url: `pmtiles://${regionUrl}`, attribution: '<a href="https://overturemaps.org">© Overture Maps Foundation</a>' },
       } : {}),
@@ -226,4 +238,13 @@ function knockMapStyle(dark, regionUrl) {
       },
     ],
   };
+  if (satellite) {
+    // Photo underneath, then only the labels (pins and territories are added just below them by app.js).
+    style.layers = [
+      { id: 'land', type: 'background', paint: { 'background-color': '#111' } },
+      { id: 'satellite', type: 'raster', source: 'sat', paint: { 'raster-fade-duration': 150 } },
+      ...style.layers.filter((l) => l.type === 'symbol'),
+    ];
+  }
+  return style;
 }
