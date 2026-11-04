@@ -2,7 +2,7 @@
 // with the cache as a fallback; MapLibre is cache-first. Map tiles and fonts are served from cache
 // and refreshed in the background, so streets you've viewed still show without a signal.
 // Address lookups always go to the network.
-const VERSION = 'knock-v6';
+const VERSION = 'knock-v7';
 const TILES = 'knock-tiles';
 const SHELL = [
   './', 'index.html', 'style.css', 'mapstyle.js', 'app.js', 'manifest.webmanifest',

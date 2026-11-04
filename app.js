@@ -85,6 +85,15 @@ const ic = (name, cls = '') =>
 const PALETTE = ['#E5484D', '#F76B15', '#FFB224', '#30A46C', '#12A594', '#0090FF', '#3E63DD', '#8E4EC6', '#D6409F', '#AD7F58', '#8B8D98', '#1C2024'];
 const KINDS = { neutral: 'Neutral', lead: 'Counts as lead', sale: 'Counts as sale', negative: 'Negative' };
 const OUTCOMES = { scheduled: ['Scheduled', 'clock'], completed: ['Completed', 'check'], sold: ['Sold', 'dollar'], noShow: ['No-show', 'no'], canceled: ['Canceled', 'x'] };
+// Appointment lengths: 30 and 45 minutes, then every half hour from 1 hour up to 8 hours.
+const LENGTHS = [30, 45, ...Array.from({ length: 15 }, (_, i) => 60 + i * 30)];
+const fmtLength = (m) => {
+  const h = Math.floor(m / 60), r = m % 60;
+  return h ? `${h} hr${h > 1 ? 's' : ''}${r ? ` ${r} min` : ''}` : `${r} min`;
+};
+const fmtLengthShort = (m) => { const h = Math.floor(m / 60), r = m % 60; return h ? `${h}h${r ? ` ${r}m` : ''}` : `${r}m`; };
+// How often the customer books the cleaning.
+const BOOKING_TYPES = { oneTime: 'One-time', monthly: 'Monthly', quarterly: 'Quarterly', biannual: 'Twice a year', annual: 'Annually' };
 const DEFAULT_CENTER = [37.3318, -122.0312];
 
 /* ---------------------------------------------------------------- data */
@@ -482,11 +491,11 @@ V.customer = (e) => {
 
 function apptHTML(a, showDay) {
   const c = get('customers', a.customerId), st = c && get('stages', c.stageId), addr = c && get('houses', c.houseId)?.address;
-  const setter = get('reps', a.setterId), closer = get('reps', a.closerId), o = OUTCOMES[a.outcome] || OUTCOMES.scheduled;
-  return `<span class="appt-time">${showDay ? `<b>${fmtDay(a.start)}</b>` : ''}<span>${fmtTime(a.start)}</span><small>${a.durationMinutes}m</small></span>` +
+  const setter = get('reps', a.setterId), tech = get('reps', a.closerId), o = OUTCOMES[a.outcome] || OUTCOMES.scheduled;
+  return `<span class="appt-time">${showDay ? `<b>${fmtDay(a.start)}</b>` : ''}<span>${fmtTime(a.start)}</span><small>${fmtLengthShort(a.durationMinutes)}</small></span>` +
     `<span class="appt-bar" style="background:${st?.colorHex || '#0090FF'}"></span>` +
     `<span class="grow"><span class="t">${esc(c ? fullName(c) : 'No customer')}</span>${addr ? `<span class="s">${esc(addr)}</span>` : ''}` +
-    `<span class="s team"><span>${ic('person')}${esc(setter?.name || '—')}</span><span class="${closer ? '' : 'warn'}">${ic('check')}${esc(closer?.name || 'Unassigned')}</span></span></span>` +
+    `<span class="s team"><span>${ic('person')}${esc(setter?.name || '—')}</span><span class="${tech ? '' : 'warn'}">${ic('check')}${esc(tech?.name || 'No tech')}</span>${a.bookingType ? `<span>${ic('back')}${esc(BOOKING_TYPES[a.bookingType] || '')}</span>` : ''}</span></span>` +
     `<span class="outc${a.outcome === 'sold' ? ' sold' : ''}">${ic(o[1])}</span>`;
 }
 
@@ -520,7 +529,7 @@ V.plannerRoot = () => {
       group(dayAppts.length
         ? dayAppts.map((a) => `<button class="row" data-act="appt-edit" data-id="${a.id}">${apptHTML(a, false)}</button>`).join('')
         : '<div class="row muted">No appointments</div>') +
-      (needs.length ? sec('Needs a closer') + group(needs.map((a) => `<button class="row" data-act="appt-edit" data-id="${a.id}">${apptHTML(a, true)}</button>`).join('')) : ''),
+      (needs.length ? sec('Needs a technician') + group(needs.map((a) => `<button class="row" data-act="appt-edit" data-id="${a.id}">${apptHTML(a, true)}</button>`).join('')) : ''),
   };
 };
 
@@ -537,12 +546,14 @@ V.appt = (e) => {
       sec('When') +
       group(
         `<label class="row"><span class="lbl">Start</span><input class="right" type="datetime-local" data-draft="start" data-type="datetime" value="${toLocalInput(d.start)}"></label>` +
-        `<label class="row"><span class="lbl">Length</span><select data-draft="durationMinutes" data-type="number">${[30, 45, 60, 90, 120].map((n) => `<option value="${n}"${n === d.durationMinutes ? ' selected' : ''}>${n} min</option>`).join('')}</select></label>`,
+        `<label class="row"><span class="lbl">Length</span><select data-draft="durationMinutes" data-type="number">${(LENGTHS.includes(d.durationMinutes) ? LENGTHS : [...LENGTHS, d.durationMinutes].sort((a, b) => a - b)).map((n) => `<option value="${n}"${n === d.durationMinutes ? ' selected' : ''}>${fmtLength(n)}</option>`).join('')}</select></label>`,
       ) +
+      sec('Booking') +
+      group(`<label class="row"><span class="lbl">Booking type</span><select data-draft="bookingType">${Object.entries(BOOKING_TYPES).map(([k, l]) => opt(k, l, d.bookingType)).join('')}</select></label>`) +
       sec('Team') +
       group(
         `<label class="row"><span class="lbl">Setter</span><select data-draft="setterId">${repOpts(d.setterId, 'None')}</select></label>` +
-        `<label class="row"><span class="lbl">Closer</span><select data-draft="closerId">${repOpts(d.closerId, 'Unassigned')}</select></label>`,
+        `<label class="row"><span class="lbl">Technician</span><select data-draft="closerId">${repOpts(d.closerId, 'Unassigned')}</select></label>`,
       ) +
       sec('Outcome') +
       group(
@@ -1191,13 +1202,13 @@ const A = {
     const base = ui.tab === 'planner' ? keyToDate(ui.day) : new Date();
     const start = new Date(base);
     if (dayKey(base) === dayKey(new Date())) { start.setTime(Date.now()); start.setMinutes(0, 0, 0); start.setHours(start.getHours() + 1); } else start.setHours(10, 0, 0, 0);
-    const draft = { customerId: customer || '', start: start.toISOString(), durationMinutes: 60, setterId: me()?.id || '', closerId: '', outcome: 'scheduled', notes: '' };
+    const draft = { customerId: customer || '', start: start.toISOString(), durationMinutes: 60, bookingType: 'oneTime', setterId: me()?.id || '', closerId: '', outcome: 'scheduled', notes: '' };
     openSheet({ stack: [{ v: 'appt', draft }] });
   },
   'appt-edit'({ id }) {
     const a = get('appointments', id);
     if (!a) return;
-    openSheet({ stack: [{ v: 'appt', id, draft: { ...a, customerId: a.customerId || '', setterId: a.setterId || '', closerId: a.closerId || '' } }] });
+    openSheet({ stack: [{ v: 'appt', id, draft: { bookingType: 'oneTime', ...a, customerId: a.customerId || '', setterId: a.setterId || '', closerId: a.closerId || '' } }] });
   },
   'appt-save'(_, el) {
     const e = topEntry(el), d = e.draft;
