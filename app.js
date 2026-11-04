@@ -767,7 +767,7 @@ function toast(msg) {
 let map, userMarker, userLatLng = null, centeredOnUser = false;
 const PIN_ZOOM = 15; // below this, pins become plain dots
 // Overture Maps buildings + house numbers for the local area (see data/README.md), read by range requests.
-const REGION_URL = new URL('data/region.pmtiles', location.href).href;
+const REGION_URL = new URL('data/region.pmtiles?v=2', location.href).href;
 if (window.pmtiles) maplibregl.addProtocol('pmtiles', new pmtiles.Protocol().tile);
 const mapStyle = (dark) => knockMapStyle(dark, window.pmtiles ? REGION_URL : null);
 const pinImages = new Set(); // image ids already added to the current style
@@ -913,8 +913,77 @@ function onMapClick(e) {
   const p = e.point, r = 14;
   const layers = ['houses-pin', 'houses-dot'].filter((id) => map.getLayer(id));
   const hit = layers.length ? map.queryRenderedFeatures([[p.x - r, p.y - r], [p.x + r, p.y + r]], { layers }) : [];
-  if (hit.length) openHouse(hit[0].properties.id, false);
-  else addHouse(e.lngLat);
+  if (hit.length) {
+    // Several pins can fall inside the hit box on a dense street: open the one closest to the finger.
+    const nearest = hit.reduce((best, f) => {
+      const h = get('houses', f.properties.id);
+      if (!h) return best;
+      const q = map.project([h.longitude, h.latitude]);
+      const d = (q.x - p.x) ** 2 + (q.y - p.y) ** 2;
+      return !best || d < best.d ? { id: h.id, d } : best;
+    }, null);
+    if (nearest) return openHouse(nearest.id, false);
+  }
+  addHouse(e.lngLat, e.point);
+}
+
+// ---- address of the house under the finger, taken from the map's own data
+function pointInRing(x, y, ring) {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const [xi, yi] = ring[i], [xj, yj] = ring[j];
+    if ((yi > y) !== (yj > y) && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+}
+function inPolygon(lng, lat, geom) {
+  const polys = geom.type === 'Polygon' ? [geom.coordinates] : geom.type === 'MultiPolygon' ? geom.coordinates : [];
+  return polys.some((rings) => pointInRing(lng, lat, rings[0]) && !rings.slice(1).some((hole) => pointInRing(lng, lat, hole)));
+}
+
+// The building outline the user tapped, if any.
+function tappedBuilding(point) {
+  const layers = ['region-building', 'building', 'region-building-3d', 'building-3d'].filter((id) => map.getLayer(id));
+  const f = map.queryRenderedFeatures(point, { layers })[0];
+  return f && /Polygon/.test(f.geometry.type) ? f.geometry : null;
+}
+
+// Picks the address point for a tap: one inside the tapped building first, otherwise the nearest within a short reach.
+function pickAddressPoint(features, point, building, reachPx) {
+  let best = null;
+  for (const f of features) {
+    if (f.geometry.type !== 'Point') continue;
+    const [lng, lat] = f.geometry.coordinates;
+    const q = map.project([lng, lat]);
+    const d = Math.hypot(q.x - point.x, q.y - point.y);
+    const inside = building ? inPolygon(lng, lat, building) : false;
+    // Points inside the tapped building always beat points outside it.
+    const score = (inside ? 0 : 1e6) + d;
+    if ((inside || d <= reachPx) && (!best || score < best.score)) best = { f, score, lng, lat };
+  }
+  return best;
+}
+
+function mapAddressAt(point) {
+  const building = tappedBuilding(point);
+  if (map.getSource('region')) {
+    const pts = map.querySourceFeatures('region', { sourceLayer: 'addresses' });
+    const hit = pickAddressPoint(pts, point, building, 28);
+    if (hit) {
+      const { number, street, unit } = hit.f.properties;
+      if (street) {
+        return { address: [number, street].join(' ') + (unit ? ` #${unit}` : ''), lng: hit.lng, lat: hit.lat, complete: true };
+      }
+      return { number: String(number), lng: hit.lng, lat: hit.lat, complete: false };
+    }
+  }
+  // OpenStreetMap house numbers carry no street name; keep the number so the lookup below can't swap in a neighbor's.
+  if (map.getSource('omt')) {
+    const pts = map.querySourceFeatures('omt', { sourceLayer: 'housenumber' });
+    const hit = pickAddressPoint(pts, point, building, 22);
+    if (hit) return { number: String(hit.f.properties.housenumber), lng: hit.lng, lat: hit.lat, complete: false };
+  }
+  return null;
 }
 
 function updateCompass() {
@@ -972,26 +1041,39 @@ function renderMapUI() {
 }
 
 let geoQueue = Promise.resolve();
-function reverseGeocode(lat, lon) {
+// knownNumber: house number already read off the map. Nominatim only supplies the street then,
+// because its nearest match is often the house next door.
+function reverseGeocode(lat, lon, knownNumber) {
   // Nominatim allows about one request per second.
   const job = geoQueue.then(async () => {
     try {
       const r = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lon}&zoom=18&addressdetails=1`);
       const j = await r.json();
       const a = j.address || {};
+      if (knownNumber) return a.road ? `${knownNumber} ${a.road}` : knownNumber;
       return [a.house_number, a.road].filter(Boolean).join(' ') || (j.display_name || '').split(',')[0] || null;
-    } catch { return null; }
+    } catch { return knownNumber || null; }
   });
   geoQueue = job.then(() => new Promise((res) => setTimeout(res, 1100)));
   return job;
 }
 
-function addHouse(latlng) {
-  const h = { id: uid(), latitude: latlng.lat, longitude: latlng.lng, address: '', notes: '', statusId: null, createdAt: nowISO() };
+function addHouse(latlng, point) {
+  const found = point ? mapAddressAt(point) : null;
+  // Put the pin on the house's own address point so it sits on the right roof.
+  const lat = found ? found.lat : latlng.lat, lng = found ? found.lng : latlng.lng;
+  // Tapping the roof of a house that's already saved opens that house instead of adding it twice.
+  if (found) {
+    const same = S.houses.find((o) => (found.complete && o.address === found.address) ||
+      (Math.abs(o.latitude - lat) < 0.00003 && Math.abs(o.longitude - lng) < 0.00003));
+    if (same) return openHouse(same.id, false);
+  }
+  const h = { id: uid(), latitude: lat, longitude: lng, address: found?.complete ? found.address : '', notes: '', statusId: null, createdAt: nowISO() };
   S.houses.push(h);
   save();
   openHouse(h.id, true);
-  reverseGeocode(h.latitude, h.longitude).then((addr) => {
+  if (found?.complete) return;
+  reverseGeocode(h.latitude, h.longitude, found?.number).then((addr) => {
     const cur = get('houses', h.id);
     if (!addr || !cur || cur.address) return;
     cur.address = addr;
