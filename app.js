@@ -682,6 +682,20 @@ function teamAccessHTML() {
     foot(owner ? 'Invite a teammate’s email, then send them the app link. They sign in with Google or with that email and see every door the team has knocked.' : 'Only the owner can invite or remove people.');
 }
 
+// Settings → Sale alerts: a push notification on this phone whenever a teammate logs a sale.
+function alertsHTML() {
+  const st = Cloud.alertsState();
+  const row = (sub, btn) => group(`<div class="row"><span class="grow"><span class="t">Sale alerts</span><span class="s">${sub}</span></span>${btn}</div>`);
+  const body = {
+    on: row('On for this phone', '<button class="mini-btn" data-act="alerts-off">Turn off</button>'),
+    off: row('When a teammate makes a sale', '<button class="mini-btn" data-act="alerts-on">Turn on</button>'),
+    blocked: row('Blocked. Turn on in iPhone Settings → Notifications → Knock', ''),
+    homescreen: row('Open Knock from its Home Screen icon to turn these on', ''),
+    unsupported: row('This browser can’t show notifications', ''),
+  }[st];
+  return sec('Notifications') + body + foot('Everyone who turns this on gets “🎉 Jay made a sale!” with the address, even when Knock is closed.');
+}
+
 V.settings = () => ({
   title: 'Settings',
   body:
@@ -699,7 +713,7 @@ V.settings = () => ({
       stages().map((s) => `<button class="row" data-act="push" data-v="stage" data-id="${s.id}"><i class="sdot" style="background:${s.colorHex}"></i><span class="grow">${esc(s.name)}</span>${ic('chev', 'chev')}</button>`).join('') +
       `<button class="row link" data-act="stage-add">${ic('plus')}Add stage</button>`,
     ) +
-    (teamMode() ? sec('Account') + group(`<div class="row"><span class="grow"><span class="t">${esc(Cloud.email)}</span><span class="s">${Cloud.role === 'owner' ? 'Team owner' : 'Team member'} · syncing</span></span><button class="mini-btn" data-act="sign-out">Sign out</button></div>`) : '') +
+    (teamMode() ? sec('Account') + group(`<div class="row"><span class="grow"><span class="t">${esc(Cloud.email)}</span><span class="s">${Cloud.role === 'owner' ? 'Team owner' : 'Team member'} · syncing</span></span><button class="mini-btn" data-act="sign-out">Sign out</button></div>`) + alertsHTML() : '') +
     sec('Data') +
     group(
       (teamMode() ? '' : `<button class="row link" data-act="demo">${ic('wand')}Load demo neighborhood</button>`) +
@@ -1308,6 +1322,8 @@ const A = {
   'set-me'({ id }) { S.reps.forEach((r) => { r.isMe = r.id === id; }); save(); render(); },
   'member-add'() { const el = $('#invite-email'); if (el?.value) Cloud.invite(el.value).then(() => { el.value = ''; }).catch(() => toast('Only the owner can invite')); },
   'member-del'({ email }) { if (confirm(`Remove ${email} from the team? They won’t be able to open the team’s data.`)) Cloud.removeMember(email); },
+  'alerts-on'() { Cloud.enableAlerts().catch((e) => { toast('Couldn’t turn on alerts'); console.error(e); render(); }); },
+  'alerts-off'() { Cloud.disableAlerts(); },
   'sign-out'() { if (confirm('Sign out of Knock on this phone?')) { Cloud.signOut(); ui.sheets = []; ui.stacks = { customers: [], planner: [], pipeline: [], team: [] }; } },
   'rep-del'({ id }) { if (confirm('Remove this teammate? Their past knocks stay, unassigned.')) { deleteRep(id); render(); } },
 

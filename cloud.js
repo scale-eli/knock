@@ -21,6 +21,9 @@ const FIREBASE_CONFIG = {
   messagingSenderId: '518588875975',
   appId: '1:518588875975:web:c5e9e83d3fb59fb8466ae2',
 };
+// Web Push key from Firebase → Project settings → Cloud Messaging → Web Push certificates (public by design).
+const VAPID_KEY = 'BMipwmF3heKwg3PF4sTOBo2tKcf1F3DIuXsreSHJTvkPGvDFlddkNqa4Bqm79TRyYX5uxYUwZAfgrz6E4cEhPLE';
+const ALERTS_KEY = 'knock.saleAlerts'; // this phone's push token, when sale alerts are on
 const SHARED = ['reps', 'statuses', 'stages', 'houses', 'visits', 'customers', 'appointments', 'territories'];
 
 const Cloud = {
@@ -125,6 +128,45 @@ const Cloud = {
     saveLocal();
     this.gate(null);
     render();
+    this.refreshAlerts();
+    openLinkedHouse();
+  },
+
+  /* ---------- sale alerts (push notifications) ---------- */
+  // 'on' | 'off' | 'blocked' | 'homescreen' (iPhone: only works from the home screen icon) | 'unsupported'
+  alertsState() {
+    const iphone = /iPhone|iPad|iPod/.test(navigator.userAgent);
+    if (!('Notification' in window) || !('PushManager' in window) || !('serviceWorker' in navigator)) {
+      return iphone && !navigator.standalone ? 'homescreen' : 'unsupported';
+    }
+    if (Notification.permission === 'denied') return 'blocked';
+    return Notification.permission === 'granted' && localStorage.getItem(ALERTS_KEY) ? 'on' : 'off';
+  },
+  async enableAlerts() {
+    if ((await Notification.requestPermission()) !== 'granted') { render(); return toast('Notifications are blocked for Knock'); }
+    await this.saveToken();
+    render();
+    toast('Sale alerts are on');
+  },
+  async saveToken() {
+    const reg = await navigator.serviceWorker.ready;
+    const token = await firebase.messaging().getToken({ vapidKey: VAPID_KEY, serviceWorkerRegistration: reg });
+    const old = localStorage.getItem(ALERTS_KEY);
+    if (old && old !== token) this.db.collection('pushTokens').doc(old).delete().catch(() => {});
+    await this.db.collection('pushTokens').doc(token).set({ token, email: this.email, updatedAt: new Date().toISOString(), device: navigator.userAgent.slice(0, 120) });
+    localStorage.setItem(ALERTS_KEY, token);
+  },
+  async disableAlerts() {
+    const token = localStorage.getItem(ALERTS_KEY);
+    localStorage.removeItem(ALERTS_KEY);
+    if (token) await this.db.collection('pushTokens').doc(token).delete().catch(() => {});
+    await firebase.messaging().deleteToken().catch(() => {});
+    render();
+    toast('Sale alerts are off');
+  },
+  // Tokens can change; re-save quietly each time the app opens with alerts on.
+  refreshAlerts() {
+    if (this.alertsState() === 'on') this.saveToken().catch(() => {});
   },
 
   // Every signed-in teammate has a rep record tied to their email, so their knocks are credited to them.
@@ -180,7 +222,13 @@ const Cloud = {
     await this.db.collection('members').doc(email).delete();
     toast(`${email} removed`);
   },
-  signOut() { this.auth.signOut(); },
+  signOut() {
+    // Stop alerts for this phone before the account goes away.
+    const token = localStorage.getItem(ALERTS_KEY);
+    localStorage.removeItem(ALERTS_KEY);
+    const done = token ? this.db.collection('pushTokens').doc(token).delete().catch(() => {}) : Promise.resolve();
+    done.then(() => this.auth.signOut());
+  },
 
   /* ---------- sign-in screen ---------- */
   gate(state, error = '') {
@@ -276,6 +324,23 @@ function showSaleAlert(title, sub, houseId) {
   setTimeout(() => el.classList.add('out'), 7000);
   setTimeout(() => el.remove(), 7600);
 }
+
+// Opening a sale notification lands on ./?house=<id> (or messages an open window): show that house.
+let linkedHouse = new URLSearchParams(location.search).get('house');
+function openLinkedHouse(id) {
+  if (id) linkedHouse = id;
+  if (!linkedHouse || !Cloud.ready) return;
+  const h = S.houses.find((x) => x.id === linkedHouse);
+  linkedHouse = null;
+  history.replaceState(null, '', location.pathname);
+  if (!h) return;
+  ui.tab = 'map';
+  ui.sheets = [];
+  render();
+  map.jumpTo({ center: [h.longitude, h.latitude], zoom: Math.max(map.getZoom(), 17.5) });
+  openHouse(h.id, false);
+}
+navigator.serviceWorker?.addEventListener('message', (e) => { if (e.data?.openHouse) openLinkedHouse(e.data.openHouse); });
 
 function friendlyError(e) {
   return ({

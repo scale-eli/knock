@@ -2,7 +2,7 @@
 // with the cache as a fallback; MapLibre is cache-first. Map tiles and fonts are served from cache
 // and refreshed in the background, so streets you've viewed still show without a signal.
 // Address lookups and team sync (Firestore) always go to the network.
-const VERSION = 'knock-v16';
+const VERSION = 'knock-v17';
 const TILES = 'knock-tiles';
 const SHELL = [
   './', 'index.html', 'style.css', 'mapstyle.js', 'cloud.js', 'app.js', 'manifest.webmanifest',
@@ -15,6 +15,7 @@ const LIBS = [
   'https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js',
   'https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js',
   'https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js',
+  'https://www.gstatic.com/firebasejs/10.14.1/firebase-messaging-compat.js',
 ];
 
 self.addEventListener('install', (e) => {
@@ -65,4 +66,32 @@ self.addEventListener('fetch', (e) => {
   if (url.hostname === 'unpkg.com' || (url.hostname === 'www.gstatic.com' && url.pathname.startsWith('/firebasejs/'))) {
     e.respondWith(caches.match(e.request).then((r) => r || fetch(e.request)));
   }
+});
+
+// Sale alerts. The server (Firebase function saleAlert) sends a data message:
+// { title: '🎉 Jay made a sale!', body: '1155 Valencia Rd', houseId }.
+self.addEventListener('push', (e) => {
+  let d = {};
+  try { const j = e.data.json(); d = j.data || j.notification || j; } catch { /* empty push */ }
+  e.waitUntil(self.registration.showNotification(d.title || 'Knock', {
+    body: d.body || '',
+    icon: 'icons/icon-192.png',
+    badge: 'icons/icon-192.png',
+    tag: d.houseId ? `sale-${d.houseId}` : undefined,
+    data: { houseId: d.houseId || '' },
+  }));
+});
+
+// Tapping the notification opens Knock on that house.
+self.addEventListener('notificationclick', (e) => {
+  e.notification.close();
+  const id = e.notification.data?.houseId || '';
+  const url = new URL(id ? `./?house=${encodeURIComponent(id)}` : './', self.registration.scope).href;
+  e.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
+    for (const c of list) {
+      if (id) c.postMessage({ openHouse: id });
+      return c.focus();
+    }
+    return self.clients.openWindow(url);
+  }));
 });
