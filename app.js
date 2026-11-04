@@ -299,8 +299,6 @@ function applyTheme() {
   if (S.appearance === 'light' || S.appearance === 'dark') document.documentElement.dataset.theme = S.appearance;
   else delete document.documentElement.dataset.theme;
   $('#theme-color')?.setAttribute('content', dark ? '#000000' : '#f2f2f7');
-  // Takes effect the next time the home-screen app is opened (iOS reads it at launch).
-  $('#status-bar-style')?.setAttribute('content', dark ? 'black-translucent' : 'default');
   // A full style reload (diff: false) fires style.load, which re-adds the houses/territory layers.
   if (map && mapIsDark !== null && mapIsDark !== dark) map.setStyle(mapStyle(dark), { diff: false });
   mapIsDark = dark;

@@ -60,11 +60,18 @@ a { color: var(--accent); }
 .ic { width: 22px; height: 22px; flex: none; }
 
 #app { position: fixed; inset: 0; overflow: hidden; }
-/* Behind the iPhone status bar: a soft band in the page color so the clock and battery stay readable
-   over the map. Zero height when the phone puts the app below an opaque status bar. */
+/* Home-screen app: fill the whole screen, under the home bar too. (No browser toolbar there, so the
+   large viewport is exactly the screen; in Safari tabs the normal inset applies.) */
+@media (display-mode: standalone) {
+  html, body { min-height: 100lvh; }
+  #app { bottom: auto; height: 100lvh; }
+}
+/* The iPhone clock and battery are always white over the app. A faint shadow fading to nothing keeps
+   them readable over a light map without looking like a bar. */
 #status-scrim {
-  position: fixed; z-index: 1400; top: 0; left: 0; right: 0; height: env(safe-area-inset-top); pointer-events: none;
-  background: linear-gradient(var(--bg), color-mix(in srgb, var(--bg) 70%, transparent));
+  position: fixed; z-index: 1400; top: 0; left: 0; right: 0; pointer-events: none;
+  height: calc(env(safe-area-inset-top) * 1.4); /* zero on screens without a notch/status bar */
+  background: linear-gradient(rgba(0, 0, 0, 0.28), rgba(0, 0, 0, 0));
 }
 
 /* ---------- tab bar ---------- */

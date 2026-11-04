@@ -5,17 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" id="status-bar-style" content="default">
-  <script>
-    // iPhone home-screen apps read the status bar style at launch: in dark mode let the app draw under
-    // a translucent bar (white text); in light mode keep the default bar (dark text).
-    (function () {
-      var pref = 'auto';
-      try { pref = (JSON.parse(localStorage.getItem('knock.v1')) || {}).appearance || 'auto'; } catch (e) {}
-      var dark = pref === 'dark' || (pref !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches);
-      document.getElementById('status-bar-style').setAttribute('content', dark ? 'black-translucent' : 'default');
-    })();
-  </script>
+  <!-- Edge to edge on iPhone: the app draws under the clock/battery and the home bar instead of
+       sitting between solid strips. -->
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Knock">
   <meta name="theme-color" id="theme-color" content="#f2f2f7">
   <title>Knock</title>
