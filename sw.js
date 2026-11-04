@@ -2,7 +2,7 @@
 // with the cache as a fallback; MapLibre is cache-first. Map tiles and fonts are served from cache
 // and refreshed in the background, so streets you've viewed still show without a signal.
 // Address lookups and team sync (Firestore) always go to the network.
-const VERSION = 'knock-v11';
+const VERSION = 'knock-v12';
 const TILES = 'knock-tiles';
 const SHELL = [
   './', 'index.html', 'style.css', 'mapstyle.js', 'cloud.js', 'app.js', 'manifest.webmanifest',
@@ -53,7 +53,7 @@ self.addEventListener('fetch', (e) => {
     return;
   }
 
-  if (url.hostname === 'tiles.openfreemap.org' || (url.hostname === 'server.arcgisonline.com' && url.pathname.includes('/World_Imagery/'))) {
+  if (url.hostname === 'tiles.openfreemap.org' || (url.hostname === 'server.arcgisonline.com' && url.pathname.includes('/World_Imagery/')) || (url.hostname === 'maps.sbcounty.gov' && url.pathname.includes('/exportImage'))) {
     e.respondWith(caches.open(TILES).then(async (c) => {
       const hit = await c.match(e.request);
       const net = fetch(e.request).then((res) => { if (res.ok) c.put(e.request, res.clone()); return res; });

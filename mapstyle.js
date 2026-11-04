@@ -80,9 +80,17 @@ function knockMapStyle(dark, regionUrl, satellite = false) {
       omt: { type: 'vector', url: 'https://tiles.openfreemap.org/planet' },
       ...(satellite ? {
         sat: {
-          type: 'raster', tileSize: 256, maxzoom: 19,
+          type: 'raster', tileSize: 256, maxzoom: 20,
           tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'],
           attribution: 'Imagery © Esri, Maxar, Earthstar Geographics',
+        },
+        // San Bernardino County's own 2024 aerial photos (about 1 ft per pixel): sharper and newer than
+        // Esri in Chino, Chino Hills and Ontario. Outside the county it returns transparent tiles, so
+        // Esri shows through.
+        county: {
+          type: 'raster', tileSize: 256, minzoom: 15, maxzoom: 20, bounds: [-117.85, 33.85, -115.7, 35.15],
+          tiles: ['https://maps.sbcounty.gov/img/rest/services/y2024_IS/ImageServer/exportImage?bbox={bbox-epsg-3857}&bboxSR=3857&imageSR=3857&size=256,256&format=jpgpng&transparent=true&f=image'],
+          attribution: 'Imagery © San Bernardino County 2024',
         },
       } : {}),
       ...(regionUrl ? {
@@ -243,6 +251,7 @@ function knockMapStyle(dark, regionUrl, satellite = false) {
     style.layers = [
       { id: 'land', type: 'background', paint: { 'background-color': '#111' } },
       { id: 'satellite', type: 'raster', source: 'sat', paint: { 'raster-fade-duration': 150 } },
+      { id: 'satellite-county', type: 'raster', source: 'county', minzoom: 15, paint: { 'raster-fade-duration': 150, 'raster-resampling': 'linear' } },
       ...style.layers.filter((l) => l.type === 'symbol'),
     ];
   }

@@ -836,7 +836,8 @@ function initMap() {
     container: 'map',
     style: mapStyle(isDark()),
     center: [c[1], c[0]],
-    zoom: S.mapZoom && S.mapZoom <= 20 ? S.mapZoom : 16,
+    zoom: S.mapZoom && S.mapZoom <= 21 ? S.mapZoom : 16,
+    maxZoom: 21,
     attributionControl: false,
     maxPitch: 60,
   });
