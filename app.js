@@ -116,7 +116,7 @@ function defaults() {
     ['Appointment', 'calendar', '#8E4EC6', 'lead'], ['Sold', 'dollar', '#30A46C', 'sale'],
     ['Do Not Knock', 'no', '#1C2024', 'negative'],
   ];
-  const sg = [['New Lead', '#0090FF'], ['Appointment', '#8E4EC6'], ['Proposal', '#FFB224'], ['Closed Won', '#30A46C'], ['Closed Lost', '#8B8D98']];
+  const sg = CLEANING_STAGES;
   return {
     version: 1,
     reps: [{ id: uid(), name: 'Me', colorHex: '#0090FF', isMe: true }],
@@ -127,10 +127,26 @@ function defaults() {
   };
 }
 
+// Pipeline stages for a window / solar panel cleaning business.
+const CLEANING_STAGES = [['New Lead', '#0090FF'], ['Quote Sent', '#FFB224'], ['Booked', '#8E4EC6'], ['Won', '#30A46C'], ['Lost', '#8B8D98']];
+const OLD_STAGE_NAMES = { 'New Lead': 'New Lead', Proposal: 'Quote Sent', Appointment: 'Booked', 'Closed Won': 'Won', 'Closed Lost': 'Lost' };
+
+// Renames the original sales stages to the cleaning ones, only if they haven't been customized.
+function migrateStages(j) {
+  const names = j.stages.map((s) => s.name).sort().join('|');
+  if (names !== Object.keys(OLD_STAGE_NAMES).sort().join('|')) return;
+  j.stages.forEach((s) => {
+    const name = OLD_STAGE_NAMES[s.name];
+    s.order = CLEANING_STAGES.findIndex(([n]) => n === name);
+    s.colorHex = CLEANING_STAGES[s.order][1];
+    s.name = name;
+  });
+}
+
 function load() {
   try {
     const j = JSON.parse(localStorage.getItem(KEY));
-    if (j && Array.isArray(j.statuses)) return j;
+    if (j && Array.isArray(j.statuses)) { migrateStages(j); return j; }
   } catch { /* fall through to defaults */ }
   return defaults();
 }
@@ -256,7 +272,7 @@ function loadDemo(center) {
         c.lastName = pick(lasts);
         c.phone = `555-01${rint(10, 99)}`;
         c.dealValue = rint(8, 32) * 1000;
-        c.stageId = last.kind === 'sale' ? (sg.find((s) => s.name === 'Closed Won')?.id ?? null) : (sg.length ? pick(sg.slice(0, 3)).id : null);
+        c.stageId = last.kind === 'sale' ? (sg.find((s) => s.name === 'Won')?.id ?? null) : (sg.length ? pick(sg.slice(0, 3)).id : null);
         customers.push(c);
       }
     }
