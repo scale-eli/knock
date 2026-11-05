@@ -657,21 +657,22 @@ V.teamRoot = () => {
       group(rows.map((x, i) => `<div class="row"><span class="rank">${i < 3 ? medals[i] : i + 1}</span>${avatar(x.r)}<span class="grow"><span class="t">${esc(x.r.name)}</span>${x.r === me() ? '<span class="you">You</span>' : ''}</span>${metric(x.leads, 'leads')}${metric(x.appts, 'appts')}${metric(x.sales, 'sales')}</div>`).join('')) +
       sec('Team') +
       group(
-        reps().map((r) => `<div class="row">${avatar(r)}<span class="grow"><span class="t">${esc(r.name)}</span>${teamMode() && r.email ? `<span class="s">${esc(r.email)}</span>` : ''}</span>${r === me()
+        reps().map((r) => `<div class="row">${avatar(r)}<span class="grow"><span class="t">${esc(r.name)}</span></span>${r === me()
           ? `<span class="val">${teamMode() ? 'You' : 'This device'}</span>`
           : `${teamMode() ? '' : `<button class="mini-btn" data-act="set-me" data-id="${r.id}">I'm ${esc(r.name)}</button>`}<button class="icon-btn danger" data-act="rep-del" data-id="${r.id}" aria-label="Remove">${ic('trash')}</button>`}</div>`).join('') +
         `<button class="row link" data-act="rep-add">${ic('person')}Add teammate</button>`,
       ) +
-      (teamMode() ? foot('Teammates appear here when they first sign in. Add people who don’t use the app (like cleaners) with Add teammate.') + teamAccessHTML() : '') +
+      (teamMode() ? foot('Teammates appear here when they first sign in. Add people who don’t use the app (like cleaners) with Add teammate.') : '') +
+      (teamMode() && Cloud.role === 'owner' ? teamAccessHTML() : '') +
       `<div class="group mt"><button class="row" data-act="push" data-v="settings">${ic('gear')}<span class="grow">Statuses, pipeline & data</span>${ic('chev', 'chev')}</button></div>`,
   };
 };
 
 /* --- settings --- */
 
-// Who can sign in to this team. Everyone sees the list; only the owner can change it.
+// Who can sign in to this team. Only the owner sees this section (and only the owner can read the list).
 function teamAccessHTML() {
-  const owner = Cloud.role === 'owner';
+  const owner = true;
   return sec('Team access') +
     group(
       Cloud.members.map((m) => `<div class="row"><span class="grow"><span class="t">${esc(m.email)}</span></span>${m.role === 'owner'
@@ -713,7 +714,9 @@ V.settings = () => ({
       stages().map((s) => `<button class="row" data-act="push" data-v="stage" data-id="${s.id}"><i class="sdot" style="background:${s.colorHex}"></i><span class="grow">${esc(s.name)}</span>${ic('chev', 'chev')}</button>`).join('') +
       `<button class="row link" data-act="stage-add">${ic('plus')}Add stage</button>`,
     ) +
-    (teamMode() ? sec('Account') + group(`<div class="row"><span class="grow"><span class="t">${esc(Cloud.email)}</span><span class="s">${Cloud.role === 'owner' ? 'Team owner' : 'Team member'} · syncing</span></span><button class="mini-btn" data-act="sign-out">Sign out</button></div>`) + alertsHTML() : '') +
+    (teamMode() ? sec('Account') + group(`<div class="row"><span class="grow"><span class="t">${esc(Cloud.email)}</span><span class="s">${Cloud.role === 'owner' ? 'Team owner' : 'Team member'} · syncing</span></span><button class="mini-btn" data-act="sign-out">Sign out</button></div>` +
+      (me() ? `<label class="row"><span class="lbl">Your name</span><input class="right" data-bind="reps.${me().id}.name" value="${esc(me().name)}" placeholder="First and last name" autocomplete="name"></label>` : '')) +
+      foot('This is the name your team sees on the leaderboard and appointments. Your email is never shown to them.') + alertsHTML() : '') +
     sec('Data') +
     group(
       (teamMode() ? '' : `<button class="row link" data-act="demo">${ic('wand')}Load demo neighborhood</button>`) +

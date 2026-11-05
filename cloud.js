@@ -63,7 +63,7 @@ const Cloud = {
       let snap = await ref.get().catch(() => null);
       if (!snap || !snap.exists) {
         // Only the owner's email is allowed to add itself (see the security rules).
-        await ref.set({ email, role: 'owner', name: user.displayName || email.split('@')[0], addedAt: new Date().toISOString() });
+        await ref.set({ email, role: 'owner', name: user.displayName || '', addedAt: new Date().toISOString() });
         snap = await ref.get();
       }
       this.role = snap.data().role || 'member';
@@ -107,7 +107,7 @@ const Cloud = {
         if (changed) { saveLocal(); scheduleRender(); }
       }, (e) => { if (e.code === 'permission-denied') this.gate('notInvited'); }));
     }
-    this.unsubs.push(this.db.collection('members').onSnapshot((snap) => {
+    if (this.role === 'owner') this.unsubs.push(this.db.collection('members').onSnapshot((snap) => {
       this.members = snap.docs.map((d) => d.data()).sort((a, b) => (a.role === 'owner' ? -1 : b.role === 'owner' ? 1 : a.email.localeCompare(b.email)));
       scheduleRender();
     }, () => {}));
@@ -173,7 +173,8 @@ const Cloud = {
     if (S.reps.some((r) => r.email === this.email)) return;
     const legacy = this.role === 'owner' && S.reps.find((r) => r.isMe && !r.email);
     if (legacy) { legacy.email = this.email; delete legacy.isMe; return; }
-    S.reps.push({ id: uid(), name: this.user.displayName || this.email.split('@')[0], colorHex: PALETTE[S.reps.length % PALETTE.length], email: this.email });
+    S.reps.push({ id: uid(), name: this.user.displayName || 'New teammate', colorHex: PALETTE[S.reps.length % PALETTE.length], email: this.email });
+    if (!this.user.displayName) setTimeout(() => toast('Add your name in Team → Statuses, pipeline & data'), 1500);
   },
 
   push() {
@@ -243,6 +244,7 @@ const Cloud = {
       signin: `${logo}<p class="gate-sub">Sign in to see every door your team has knocked.</p>${err}
         <button class="gate-btn google" data-gate="google">Continue with Google</button>
         <div class="gate-or"><span>or use email</span></div>
+        <input id="gate-name" type="text" autocomplete="name" placeholder="Your name (for new accounts)">
         <input id="gate-email" type="email" autocomplete="email" placeholder="Email" inputmode="email">
         <input id="gate-pass" type="password" autocomplete="current-password" placeholder="Password (6+ characters)">
         <button class="gate-btn primary" data-gate="signin">Sign in</button>
@@ -273,7 +275,10 @@ const Cloud = {
         }
       } else if (act === 'signin') await a.signInWithEmailAndPassword(em(), pw());
       else if (act === 'signup') {
+        const name = ($('#gate-name')?.value || '').trim();
+        if (!name) return this.gate('signin', 'Type your name so your team knows who you are.');
         const cred = await a.createUserWithEmailAndPassword(em(), pw());
+        await cred.user.updateProfile({ displayName: name });
         await cred.user.sendEmailVerification();
         this.gate('verify');
       } else if (act === 'reset') {
