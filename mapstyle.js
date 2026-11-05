@@ -32,7 +32,8 @@ const MAP_PALETTE = {
 // Labels over aerial photos: white text with a dark halo so it reads on any roof or lawn.
 const SAT_LABELS = { roadText: '#FFFFFF', text: '#FFFFFF', subtle: '#E5E5EA', number: '#FFFFFF', halo: 'rgba(0,0,0,0.8)', waterText: '#CFE6FF', parkText: '#DDF2D2' };
 
-function knockMapStyle(dark, regionUrl, satellite = false, countyPhotos = true) {
+// countyPhotos: 'sharp' (San Bernardino 2024, crisper) | 'new' (San Bernardino 2026, newer but softer) | 'off'
+function knockMapStyle(dark, regionUrl, satellite = false, countyPhotos = 'sharp') {
   const c = satellite ? { ...MAP_PALETTE.dark, ...SAT_LABELS } : dark ? MAP_PALETTE.dark : MAP_PALETTE.light;
   const name = ['coalesce', ['get', 'name:en'], ['get', 'name']];
   const cls = (...v) => ['match', ['get', 'class'], v, true, false];
@@ -84,13 +85,13 @@ function knockMapStyle(dark, regionUrl, satellite = false, countyPhotos = true) 
           tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'],
           attribution: 'Imagery © Esri, Maxar, Earthstar Geographics',
         },
-        // San Bernardino County's own 2024 aerial photos (about 1 ft per pixel): sharper and newer than
+        // San Bernardino County's own aerial photos (about 1 ft per pixel): sharper and newer than
         // Esri in Chino, Chino Hills and Ontario. Outside the county it returns transparent tiles, so
         // Esri shows through.
         county: {
           type: 'raster', tileSize: 256, minzoom: 15, maxzoom: 20, bounds: [-117.85, 33.85, -115.7, 35.15],
-          tiles: ['https://maps.sbcounty.gov/img/rest/services/y2024_IS/ImageServer/exportImage?bbox={bbox-epsg-3857}&bboxSR=3857&imageSR=3857&size=256,256&format=jpgpng&transparent=true&f=image'],
-          attribution: 'Imagery © San Bernardino County 2024',
+          tiles: [`https://maps.sbcounty.gov/img/rest/services/${countyPhotos === 'new' ? 'y2026_COG' : 'y2024_IS'}/ImageServer/exportImage?bbox={bbox-epsg-3857}&bboxSR=3857&imageSR=3857&size=256,256&format=jpgpng&transparent=true&f=image`],
+          attribution: `Imagery © San Bernardino County ${countyPhotos === 'new' ? 2026 : 2024}`,
         },
         // Riverside County's 2020 aerial photos (3 in per pixel) for Eastvale, Norco and Corona.
         // Very sharp but older: homes and panels added since 2020 won't be on them.
@@ -258,7 +259,7 @@ function knockMapStyle(dark, regionUrl, satellite = false, countyPhotos = true) 
     style.layers = [
       { id: 'land', type: 'background', paint: { 'background-color': '#111' } },
       { id: 'satellite', type: 'raster', source: 'sat', paint: { 'raster-fade-duration': 150 } },
-      ...(countyPhotos ? [
+      ...(countyPhotos !== 'off' ? [
         { id: 'satellite-county', type: 'raster', source: 'county', minzoom: 15, paint: { 'raster-fade-duration': 150 } },
         { id: 'satellite-riverside', type: 'raster', source: 'riverside', minzoom: 15, paint: { 'raster-fade-duration': 150 } },
       ] : []),

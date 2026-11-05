@@ -418,7 +418,7 @@ V.mapMenu = () => ({
     `<button class="row" data-act="draw-start">${ic('pencil')}<span class="grow">Draw territory</span></button>` +
     `<button class="row" data-act="open-terrs">${ic('square')}<span class="grow">Territories</span>${ic('chev', 'chev')}</button>` +
     `<button class="row" data-act="map-type">${ic(isSatellite() ? 'map' : 'globe')}<span class="grow">${isSatellite() ? 'Standard map' : 'Satellite view'}</span></button>` +
-    (isSatellite() ? `<button class="row" data-act="county-photos">${ic('globe')}<span class="grow"><span class="t">County aerial photos</span><span class="s">${countyPhotos() ? 'SB County 2024 · Riverside 2020' : 'Using Esri imagery only'}</span></span><span class="val">${countyPhotos() ? 'On' : 'Off'}</span></button>` : '') +
+    (isSatellite() ? `<button class="row" data-act="county-photos">${ic('globe')}<span class="grow"><span class="t">County aerial photos</span><span class="s">${COUNTY_LABELS[countyPhotos()][1]}</span></span><span class="val">${COUNTY_LABELS[countyPhotos()][0]}</span></button>` : '') +
     `<button class="row" data-act="fit">${ic('expand')}<span class="grow">Fit all houses</span></button>` +
     `<button class="row" data-act="theme-toggle">${ic(isDark() ? 'sun' : 'moon')}<span class="grow">${isDark() ? 'Light mode' : 'Dark mode'}</span></button>`,
   ),
@@ -840,7 +840,9 @@ const PIN_ZOOM = 15; // below this, pins become plain dots
 const REGION_URL = new URL('data/region.pmtiles?v=3', location.href).href;
 if (window.pmtiles) maplibregl.addProtocol('pmtiles', new pmtiles.Protocol().tile);
 const isSatellite = () => S.mapType === 'satellite';
-const countyPhotos = () => S.countyPhotos !== false; // county aerial photos in satellite view (on by default)
+// County aerial photos in satellite view: 'sharp' (default), 'new' or 'off'. Older saves stored true/false.
+const countyPhotos = () => (S.countyPhotos === false || S.countyPhotos === 'off' ? 'off' : S.countyPhotos === 'new' ? 'new' : 'sharp');
+const COUNTY_LABELS = { sharp: ['Sharpest', 'SB County 2024 · Riverside 2020'], new: ['Newest', 'SB County 2026 (softer) · Riverside 2020'], off: ['Off', 'Esri imagery only'] };
 const mapStyle = (dark) => knockMapStyle(dark, window.pmtiles ? REGION_URL : null, isSatellite(), countyPhotos());
 const mapStyleKey = () => `${isDark()}|${isSatellite()}|${countyPhotos()}`;
 const pinImages = new Set(); // image ids already added to the current style
@@ -1398,7 +1400,7 @@ const A = {
     render();
   },
   fit() { ui.sheets = []; render(); fitHouses(); },
-  'county-photos'() { S.countyPhotos = !countyPhotos(); save(); applyTheme(); render(); },
+  'county-photos'() { S.countyPhotos = { sharp: 'new', new: 'off', off: 'sharp' }[countyPhotos()]; save(); applyTheme(); render(); },
   'map-type'(_, el) {
     S.mapType = isSatellite() ? 'standard' : 'satellite';
     save();
