@@ -323,6 +323,7 @@ const ui = {
   draft: [],
   fitOnShow: false,
   demoMsg: '',
+  minimized: null, // an appointment swiped down into its customer: { sheet, customerId }
 };
 
 /* ---------------------------------------------------------------- small html helpers */
@@ -468,7 +469,8 @@ function customerListHTML() {
     ? all.filter((c) => fullName(c).toLowerCase().includes(q) || c.phone.includes(q) || (get('houses', c.houseId)?.address || '').toLowerCase().includes(q))
     : all;
   if (!list.length) return empty('search', 'No results', `No customers match “${esc(ui.search)}”.`);
-  return group(list.map(customerRow).join(''));
+  // Swipe a row left to show Delete (see the gesture handlers near the bottom).
+  return group(list.map((c) => `<div class="swipe"><button class="swipe-del" data-act="cust-quick-del" data-id="${c.id}">Delete</button>${customerRow(c)}</div>`).join(''));
 }
 
 V.customersRoot = () => ({
@@ -517,9 +519,19 @@ V.customer = (e) => {
       ) +
       sec('Notes') +
       group(`<div class="row"><textarea rows="3" data-bind="${b('notes')}" placeholder="Notes">${esc(c.notes)}</textarea></div>`) +
-      `<div class="group mt"><button class="row danger" data-act="cust-del" data-id="${c.id}">Delete customer</button></div>`,
+      `<div class="group mt"><button class="row danger" data-act="cust-del" data-id="${c.id}">Delete customer</button></div>` +
+      draftBarHTML(c.id),
   };
 };
+
+// The appointment swiped down into this customer: a bar at the bottom; tap it to keep going.
+function draftBarHTML(customerId) {
+  const m = ui.minimized;
+  if (m?.customerId !== customerId) return '';
+  const e = m.sheet.stack[0], d = e.draft;
+  return `<button class="draft-bar" data-act="appt-restore">${ic('calendar')}<span class="grow"><span class="t">${e.id ? 'Appointment' : 'New appointment'}</span>` +
+    `<span class="s">${esc(fmtDayTime(d.start))} · Not saved</span></span><span class="draft-open">Open</span></button>`;
+}
 
 /* --- planner --- */
 
@@ -827,12 +839,89 @@ function pop(fromSheet) {
   render();
 }
 
-function toast(msg) {
+function saveAppt(e) {
+  const d = e.draft;
+  const clean = { ...d, customerId: d.customerId || null, setterId: d.setterId || null, closerId: d.closerId || null };
+  let a;
+  const old = e.id && get('appointments', e.id);
+  if (old) a = Object.assign(old, clean); else S.appointments.push(a = { ...clean, id: e.id || uid() });
+  // A recurring job marked done books its next visit, once.
+  const months = BOOKING_MONTHS[a.bookingType];
+  if (months && (a.outcome === 'completed' || a.outcome === 'sold') && !get('appointments', a.nextId)) {
+    const next = {
+      id: uid(), customerId: a.customerId, start: addMonths(a.start, months), durationMinutes: a.durationMinutes,
+      bookingType: a.bookingType, setterId: a.setterId, closerId: a.closerId, outcome: 'scheduled', notes: '',
+    };
+    S.appointments.push(next);
+    a.nextId = next.id;
+    toast(`Next visit booked for ${fmtDay(next.start)} (${BOOKING_TYPES[a.bookingType]})`);
+  }
+  save();
+}
+
+function toast(msg, action) {
   const t = document.createElement('div');
   t.className = 'toast';
   t.textContent = msg;
+  if (action) {
+    const b = document.createElement('button');
+    b.textContent = action.label;
+    b.onclick = () => { t.remove(); action.run(); };
+    t.append(b);
+  }
   document.body.appendChild(t);
-  setTimeout(() => t.remove(), 2600);
+  setTimeout(() => t.remove(), action ? 5000 : 2600);
+}
+
+/* --- appointments minimized into a customer ---
+   An appointment opened from a customer can be swiped down: it leaves the screen but keeps everything
+   typed, and the customer shows a bar to reopen it. Leaving that customer asks to save it first. */
+
+// The view a tap came from: the top of its sheet, or the page.
+const viewOf = (el) => (el?.closest('.sheet') ? topEntry(el) : ui.stacks[ui.tab]?.at(-1));
+
+function minimizeAppt() {
+  const s = ui.sheets.at(-1);
+  if (!s?.fromCustomer) return;
+  ui.sheets.pop();
+  s.shown = false; // slide up again when reopened
+  ui.minimized = { sheet: s, customerId: s.fromCustomer };
+  render();
+}
+function restoreAppt() {
+  const m = ui.minimized;
+  if (!m) return;
+  ui.minimized = null;
+  openSheet(m.sheet);
+}
+
+// Would this tap leave the customer that holds the minimized appointment?
+function leavesDraft(el) {
+  const id = ui.minimized?.customerId, act = el.dataset.act;
+  const isIt = (e) => e?.v === 'customer' && e.id === id;
+  if (act === 'pop') return isIt(viewOf(el));
+  if (act === 'sheet-close' || act === 'sheet-dismiss') return !!ui.sheets.at(-1)?.stack.some(isIt);
+  if (act === 'tab') return isIt(ui.sheets.at(-1)?.stack.at(-1) || ui.stacks[ui.tab]?.at(-1));
+  return false;
+}
+
+function askSaveDraft(then) {
+  const m = ui.minimized, d = m.sheet.stack[0].draft, c = get('customers', d.customerId);
+  const box = document.createElement('div');
+  box.className = 'alert-wrap';
+  box.innerHTML = `<div class="alert"><div class="alert-text"><b>Save this appointment?</b>` +
+    `<span>${esc(fmtDayTime(d.start))}${c ? ` with ${esc(fullName(c))}` : ''} isn’t saved yet.</span></div>` +
+    `<button data-a="save" class="strong">Save</button><button data-a="discard" class="danger">Don’t save</button><button data-a="keep">Keep editing</button></div>`;
+  box.addEventListener('click', (e) => {
+    const a = e.target.closest('button')?.dataset.a;
+    if (!a) return;
+    box.remove();
+    if (a === 'keep') { restoreAppt(); return; }
+    ui.minimized = null;
+    if (a === 'save') { saveAppt(m.sheet.stack[0]); toast('Appointment saved'); }
+    then();
+  });
+  document.body.appendChild(box);
 }
 
 /* ---------------------------------------------------------------- map
@@ -1248,7 +1337,8 @@ const A = {
   push({ v, id }, el) { push(v, id, !!el.closest('.sheet')); },
   pop(_, el) { pop(!!el.closest('.sheet')); },
   'sheet-close': () => closeSheet(),
-  'sheet-dismiss': () => closeSheet(),
+  // Tapping outside an appointment opened from a customer minimizes it rather than losing what was typed.
+  'sheet-dismiss': () => { if (ui.sheets.at(-1)?.fromCustomer) minimizeAppt(); else closeSheet(); },
 
   knock({ house, status }) {
     const h = get('houses', house), s = get('statuses', status);
@@ -1270,8 +1360,19 @@ const A = {
   'cust-new'() { const c = createCustomer(null); push('customer', c.id, false); },
   'cust-del'({ id }, el) {
     if (!confirm('Delete this customer and their appointments?')) return;
+    if (ui.minimized?.customerId === id) ui.minimized = null;
     deleteCustomer(id);
     pop(!!el.closest('.sheet'));
+  },
+  'cust-quick-del'({ id }) {
+    const c = get('customers', id);
+    if (!c) return;
+    const appts = S.appointments.filter((a) => a.customerId === id);
+    if (ui.minimized?.customerId === id) ui.minimized = null;
+    openSwipe = null;
+    deleteCustomer(id);
+    render();
+    toast(`${fullName(c)} deleted`, { label: 'Undo', run() { S.customers.push(c); S.appointments.push(...appts); save(); render(); } });
   },
   'house-del'({ id }) {
     if (!confirm('Delete this house and its history?')) return;
@@ -1279,35 +1380,25 @@ const A = {
     closeSheet();
   },
 
-  'appt-new'({ customer }) {
+  'appt-new'({ customer }, el) {
+    const from = viewOf(el), fromCustomer = from?.v === 'customer' ? from.id : null;
+    if (fromCustomer && ui.minimized?.customerId === fromCustomer) { restoreAppt(); return; }
     const base = ui.tab === 'planner' ? keyToDate(ui.day) : new Date();
     const start = new Date(base);
     if (dayKey(base) === dayKey(new Date())) { start.setTime(Date.now()); start.setMinutes(0, 0, 0); start.setHours(start.getHours() + 1); } else start.setHours(10, 0, 0, 0);
     const draft = { customerId: customer || '', start: start.toISOString(), durationMinutes: 60, bookingType: 'oneTime', setterId: me()?.id || '', closerId: '', outcome: 'scheduled', notes: '' };
-    openSheet({ stack: [{ v: 'appt', draft }] });
+    openSheet({ stack: [{ v: 'appt', draft }], fromCustomer });
   },
-  'appt-edit'({ id }) {
+  'appt-edit'({ id }, el) {
     const a = get('appointments', id);
     if (!a) return;
-    openSheet({ stack: [{ v: 'appt', id, draft: { bookingType: 'oneTime', ...a, customerId: a.customerId || '', setterId: a.setterId || '', closerId: a.closerId || '' } }] });
+    const from = viewOf(el), fromCustomer = from?.v === 'customer' ? from.id : null;
+    const open = () => openSheet({ stack: [{ v: 'appt', id, draft: { bookingType: 'oneTime', ...a, customerId: a.customerId || '', setterId: a.setterId || '', closerId: a.closerId || '' } }], fromCustomer });
+    if (ui.minimized) askSaveDraft(open); else open();
   },
+  'appt-restore'() { restoreAppt(); },
   'appt-save'(_, el) {
-    const e = topEntry(el), d = e.draft;
-    const clean = { ...d, customerId: d.customerId || null, setterId: d.setterId || null, closerId: d.closerId || null };
-    let a;
-    if (e.id) a = Object.assign(get('appointments', e.id), clean); else S.appointments.push(a = { id: uid(), ...clean });
-    // A recurring job marked done books its next visit, once.
-    const months = BOOKING_MONTHS[a.bookingType];
-    if (months && (a.outcome === 'completed' || a.outcome === 'sold') && !get('appointments', a.nextId)) {
-      const next = {
-        id: uid(), customerId: a.customerId, start: addMonths(a.start, months), durationMinutes: a.durationMinutes,
-        bookingType: a.bookingType, setterId: a.setterId, closerId: a.closerId, outcome: 'scheduled', notes: '',
-      };
-      S.appointments.push(next);
-      a.nextId = next.id;
-      toast(`Next visit booked for ${fmtDay(next.start)} (${BOOKING_TYPES[a.bookingType]})`);
-    }
-    save();
+    saveAppt(topEntry(el));
     closeSheet();
   },
   'appt-del'({ id }) {
@@ -1460,8 +1551,69 @@ document.addEventListener('click', (e) => {
   const el = e.target.closest('[data-act]');
   if (!el || el.disabled) return;
   const fn = A[el.dataset.act];
-  if (fn) fn(el.dataset, el);
+  if (!fn) return;
+  if (ui.minimized && leavesDraft(el)) { askSaveDraft(() => fn(el.dataset, el)); return; }
+  fn(el.dataset, el);
 });
+
+/* ---------------------------------------------------------------- gestures */
+
+// Customer list: swipe a row left to show Delete; swipe it most of the way across to delete at once.
+const SWIPE_W = 92;
+let swipe = null, openSwipe = null, eatClick = false;
+function setSwipe(wrap, x, animate) {
+  wrap.classList.toggle('dragging', !animate);
+  wrap.querySelector('.row').style.transform = x ? `translateX(${x}px)` : '';
+}
+function closeOpenSwipe() { if (openSwipe) setSwipe(openSwipe, 0, true); openSwipe = null; }
+
+// Appointment sheet opened from a customer: drag its top bar down to minimize it into the customer.
+let drag = null;
+
+document.addEventListener('pointerdown', (e) => {
+  eatClick = false;
+  const wrap = e.target.closest('.swipe'), onDelete = !!e.target.closest('.swipe-del');
+  // While a row shows Delete, any other tap just closes it.
+  if (openSwipe && !(wrap === openSwipe && onDelete)) { closeOpenSwipe(); eatClick = true; return; }
+  if (wrap && !onDelete) swipe = { wrap, x0: e.clientX, y0: e.clientY, axis: null, x: 0 };
+  const sheet = e.target.closest('.sheet');
+  if (sheet && +sheet.dataset.sheet === ui.sheets.length - 1 && ui.sheets.at(-1).fromCustomer && e.target.closest('.grabber, .sheet-head')) {
+    drag = { sheet, y0: e.clientY, y: 0, on: false };
+  }
+});
+document.addEventListener('pointermove', (e) => {
+  if (swipe) {
+    const dx = e.clientX - swipe.x0, dy = e.clientY - swipe.y0;
+    if (!swipe.axis && Math.hypot(dx, dy) > 8) swipe.axis = Math.abs(dx) > Math.abs(dy) ? 'x' : 'y';
+    if (swipe.axis === 'x') { swipe.x = Math.min(0, dx); setSwipe(swipe.wrap, swipe.x, false); }
+  }
+  if (drag) {
+    drag.y = Math.max(0, e.clientY - drag.y0);
+    if (drag.y > 8) drag.on = true;
+    if (drag.on) { drag.sheet.style.transition = 'none'; drag.sheet.style.transform = `translateY(${drag.y}px)`; }
+  }
+});
+function endGesture() {
+  if (swipe?.axis === 'x') {
+    eatClick = true; // lifting the finger after a swipe isn't a tap
+    const w = swipe.wrap, id = w.querySelector('.swipe-del').dataset.id;
+    if (-swipe.x > w.offsetWidth * 0.6) { setSwipe(w, -w.offsetWidth, true); setTimeout(() => A['cust-quick-del']({ id }), 180); }
+    else if (-swipe.x > SWIPE_W / 2) { setSwipe(w, -SWIPE_W, true); openSwipe = w; }
+    else setSwipe(w, 0, true);
+  }
+  swipe = null;
+  if (drag?.on) {
+    eatClick = true;
+    const { sheet, y } = drag;
+    sheet.style.transition = 'transform 0.22s ease-out';
+    if (y > 110) { sheet.style.transform = 'translateY(110%)'; setTimeout(minimizeAppt, 200); }
+    else sheet.style.transform = '';
+  }
+  drag = null;
+}
+document.addEventListener('pointerup', endGesture);
+document.addEventListener('pointercancel', endGesture);
+document.addEventListener('click', (e) => { if (eatClick) { eatClick = false; e.stopPropagation(); e.preventDefault(); } }, true);
 
 document.addEventListener('input', (e) => {
   const t = e.target;
