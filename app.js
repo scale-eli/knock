@@ -527,7 +527,7 @@ function apptHTML(a, showDay) {
   return `<span class="appt-time">${showDay ? `<b>${fmtDay(a.start)}</b>` : ''}<span>${fmtTime(a.start)}</span><small>${fmtLengthShort(a.durationMinutes)}</small></span>` +
     `<span class="appt-bar" style="background:${st?.colorHex || '#0090FF'}"></span>` +
     `<span class="grow"><span class="t">${esc(c ? fullName(c) : 'No customer')}</span>${addr ? `<span class="s">${esc(addr)}</span>` : ''}` +
-    `<span class="s team"><span>${ic('person')}${esc(setter?.name || '—')}</span><span class="${tech ? '' : 'warn'}">${ic('check')}${esc(tech?.name || 'No cleaner')}</span>${a.bookingType ? `<span>${ic('back')}${esc(BOOKING_TYPES[a.bookingType] || '')}</span>` : ''}</span></span>` +
+    `<span class="s team"><span>${ic('person')}${esc(setter?.name || '—')}</span><span class="${tech ? '' : 'warn'}">${ic('check')}${esc(tech?.name || 'No tech')}</span>${a.bookingType ? `<span>${ic('back')}${esc(BOOKING_TYPES[a.bookingType] || '')}</span>` : ''}</span></span>` +
     `<span class="outc${a.outcome === 'sold' ? ' sold' : ''}">${ic(o[1])}</span>`;
 }
 
@@ -561,7 +561,7 @@ V.plannerRoot = () => {
       group(dayAppts.length
         ? dayAppts.map((a) => `<button class="row" data-act="appt-edit" data-id="${a.id}">${apptHTML(a, false)}</button>`).join('')
         : '<div class="row muted">No appointments</div>') +
-      (needs.length ? sec('Needs a cleaner') + group(needs.map((a) => `<button class="row" data-act="appt-edit" data-id="${a.id}">${apptHTML(a, true)}</button>`).join('')) : ''),
+      (needs.length ? sec('Needs a tech') + group(needs.map((a) => `<button class="row" data-act="appt-edit" data-id="${a.id}">${apptHTML(a, true)}</button>`).join('')) : ''),
   };
 };
 
@@ -585,7 +585,7 @@ V.appt = (e) => {
       sec('Team') +
       group(
         `<label class="row"><span class="lbl">Setter</span><select data-draft="setterId">${repOpts(d.setterId, 'None')}</select></label>` +
-        `<label class="row"><span class="lbl">Cleaner</span><select data-draft="closerId">${repOpts(d.closerId, 'Unassigned')}</select></label>`,
+        `<label class="row"><span class="lbl">Tech</span><select data-draft="closerId">${repOpts(d.closerId, 'Unassigned')}</select></label>`,
       ) +
       sec('Outcome') +
       group(
@@ -662,7 +662,7 @@ V.teamRoot = () => {
           : `${teamMode() ? '' : `<button class="mini-btn" data-act="set-me" data-id="${r.id}">I'm ${esc(r.name)}</button>`}<button class="icon-btn danger" data-act="rep-del" data-id="${r.id}" aria-label="Remove">${ic('trash')}</button>`}</div>`).join('') +
         `<button class="row link" data-act="rep-add">${ic('person')}Add teammate</button>`,
       ) +
-      (teamMode() ? foot('Teammates appear here when they first sign in. Add people who don’t use the app (like cleaners) with Add teammate.') : '') +
+      (teamMode() ? foot('Teammates appear here when they first sign in. Add people who don’t use the app (like techs) with Add teammate.') : '') +
       (teamMode() && Cloud.role === 'owner' ? teamAccessHTML() : '') +
       `<div class="group mt"><button class="row" data-act="push" data-v="settings">${ic('gear')}<span class="grow">Statuses, pipeline & data</span>${ic('chev', 'chev')}</button></div>`,
   };
