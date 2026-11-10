@@ -171,6 +171,8 @@ const reps = () => [...S.reps].sort((a, b) => a.name.localeCompare(b.name));
 // Signed in: the rep tied to this login. Otherwise: the rep picked as "this device".
 const me = () => (teamMode() ? S.reps.find((r) => r.email === Cloud.email) : S.reps.find((r) => r.isMe));
 const visitsOf = (h) => S.visits.filter((v) => v.houseId === h.id).sort((a, b) => b.date.localeCompare(a.date));
+// A door counts once per rep per day: keeps each rep's latest knock at each house per day.
+const oneADay = (vs) => [...new Map([...vs].sort((a, b) => a.date.localeCompare(b.date)).map((v) => [`${v.repId}|${v.houseId}|${dayKey(v.date)}`, v])).values()];
 const customerOf = (h) => S.customers.find((c) => c.houseId === h.id);
 const fullName = (c) => [c.firstName, c.lastName].filter(Boolean).join(' ') || 'New customer';
 const initials = (c) => ((c.firstName[0] || '') + (c.lastName[0] || '')).toUpperCase() || '?';
@@ -635,7 +637,7 @@ V.teamRoot = () => {
   const p = ui.period;
   const kind = Object.fromEntries(S.statuses.map((s) => [s.id, s.kind]));
   const rows = reps().map((r) => {
-    const mine = S.visits.filter((v) => v.repId === r.id && inPeriod(v.date, p));
+    const mine = oneADay(S.visits.filter((v) => v.repId === r.id && inPeriod(v.date, p)));
     return {
       r,
       doors: mine.length,
@@ -1106,7 +1108,7 @@ function renderMapUI() {
       `<button class="icon-btn link" data-act="draw-undo" aria-label="Undo"${ui.draft.length ? '' : ' disabled'}>${ic('back')}</button>` +
       `<button class="pill-btn" data-act="draw-cancel">Cancel</button><button class="pill-btn primary" data-act="draw-save"${ui.draft.length < 3 ? ' disabled' : ''}>Save</button></div>`;
   } else {
-    const mine = S.visits.filter((v) => v.repId === me()?.id && inPeriod(v.date, 'today'));
+    const mine = oneADay(S.visits.filter((v) => v.repId === me()?.id && inPeriod(v.date, 'today')));
     const leads = mine.filter((v) => isLeadish(get('statuses', v.statusId))).length;
     bottom = `<div class="bar-card"><span class="stat"><b>${mine.length}</b><small>doors today</small></span><i class="vdiv"></i>` +
       `<span class="stat"><b>${leads}</b><small>leads</small></span><i class="vdiv"></i><span class="stat"><b>${S.houses.length}</b><small>on map</small></span>` +
@@ -1251,8 +1253,13 @@ const A = {
   knock({ house, status }) {
     const h = get('houses', house), s = get('statuses', status);
     if (!h || !s) return;
-    const note = $('#visit-note')?.value.trim() || '';
-    S.visits.push({ id: uid(), date: nowISO(), note, houseId: h.id, repId: me()?.id || null, statusId: s.id });
+    const repId = me()?.id || null, today = dayKey(new Date());
+    // Tapping another status for a house you already knocked today replaces that knock, so the door
+    // counts once. It gets a new id (a fresh record), so a change to Sold still sends the sale alert.
+    const earlier = S.visits.filter((v) => v.houseId === h.id && v.repId === repId && dayKey(v.date) === today);
+    const note = $('#visit-note')?.value.trim() || earlier.map((v) => v.note).filter(Boolean).at(-1) || '';
+    if (earlier.length) S.visits = S.visits.filter((v) => !earlier.includes(v));
+    S.visits.push({ id: uid(), date: nowISO(), note, houseId: h.id, repId, statusId: s.id });
     h.statusId = s.id;
     save();
     navigator.vibrate?.(12);
