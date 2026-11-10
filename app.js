@@ -530,7 +530,7 @@ function draftBarHTML(customerId) {
   if (m?.customerId !== customerId) return '';
   const e = m.sheet.stack[0], d = e.draft;
   return `<button class="draft-bar" data-act="appt-restore">${ic('calendar')}<span class="grow"><span class="t">${e.id ? 'Appointment' : 'New appointment'}</span>` +
-    `<span class="s">${esc(fmtDayTime(d.start))} · Not saved</span></span><span class="draft-open">Open</span></button>`;
+    `<span class="s">${esc(fmtDayTime(d.start))} · Not saved</span></span><span class="draft-open">Open</span></button><div class="draft-space"></div>`;
 }
 
 /* --- planner --- */
